@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
 const cfg = p => JSON.parse(readFileSync(resolve(__dir, p), 'utf8'));
 
-import { addJobs } from './lib/queue.mjs';
+import { addJobs, loadQueue } from './lib/queue.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
@@ -23,6 +23,11 @@ async function main() {
   // Load config
   const settings = cfg('config/settings.json');
   const searchConfig = cfg('config/search_config.json');
+
+  // First run detection: if queue is empty, use first_run_days lookback
+  const isFirstRun = loadQueue().length === 0;
+  const lookbackDays = isFirstRun ? (searchConfig.first_run_days || 90) : null;
+  if (isFirstRun) console.log(`📅 First run — looking back ${lookbackDays} days\n`);
 
   let totalAdded = 0;
   let totalSeen = 0;
@@ -43,7 +48,10 @@ async function main() {
       console.log('  ✅ Logged in');
 
       for (const search of liSearches) {
-        const jobs = await searchLinkedIn(liBrowser.page, search);
+        const effectiveSearch = lookbackDays
+          ? { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } }
+          : search;
+        const jobs = await searchLinkedIn(liBrowser.page, effectiveSearch);
         const added = addJobs(jobs);
         totalAdded += added;
         totalSeen += jobs.length;
@@ -69,7 +77,10 @@ async function main() {
       else console.log('  ✅ Logged in');
 
       for (const search of wfSearches) {
-        const jobs = await searchWellfound(wfBrowser.page, search);
+        const effectiveSearch = lookbackDays
+          ? { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } }
+          : search;
+        const jobs = await searchWellfound(wfBrowser.page, effectiveSearch);
         const added = addJobs(jobs);
         totalAdded += added;
         totalSeen += jobs.length;
