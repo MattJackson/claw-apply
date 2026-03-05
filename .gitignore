@@ -10,3 +10,4 @@ config/profile.json
 config/answers.json
 
 # Templates are committed instead (see config/*.example.json)
+node_modules/
