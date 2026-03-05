@@ -2,7 +2,7 @@
 /**
  * job_applier.mjs — claw-apply Job Applier
  * Reads jobs queue and applies to each new/needs_answer job
- * Run via cron or manually: node job_applier.mjs
+ * Run via cron or manually: node job_applier.mjs [--preview]
  */
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -17,6 +17,13 @@ import { FormFiller } from './lib/form_filler.mjs';
 import { verifyLogin as liLogin, applyLinkedIn } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, applyWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatApplySummary, formatUnknownQuestion } from './lib/notify.mjs';
+import {
+  DEFAULT_REVIEW_WINDOW_MINUTES,
+  APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_WF_BASE,
+  APPLY_BETWEEN_DELAY_JITTER
+} from './lib/constants.mjs';
+
+const isPreview = process.argv.includes('--preview');
 
 async function main() {
   console.log('🚀 claw-apply: Job Applier starting\n');
@@ -28,22 +35,27 @@ async function main() {
     : [];
 
   const formFiller = new FormFiller(profile, answers);
+  const maxApps = settings.max_applications_per_run || Infinity;
 
-  // Mode B: send queue preview and wait for review window
-  if (settings.mode === 'B') {
+  // Preview mode: show queue and exit
+  if (isPreview) {
     const newJobs = getJobsByStatus('new');
-    if (newJobs.length > 0) {
-      const preview = newJobs.slice(0, 10).map(j => `• ${j.title} @ ${j.company}`).join('\n');
-      const msg = `📋 *Apply run starting in ${settings.review_window_minutes || 30} min*\n\n${preview}${newJobs.length > 10 ? `\n...and ${newJobs.length - 10} more` : ''}\n\nReply with job IDs to skip, or ignore to proceed.`;
-      await sendTelegram(settings, msg);
-      console.log(`[Mode B] Waiting ${settings.review_window_minutes || 30} minutes for review...`);
-      await new Promise(r => setTimeout(r, (settings.review_window_minutes || 30) * 60 * 1000));
+    if (newJobs.length === 0) {
+      console.log('No new jobs in queue.');
+      return;
     }
+    console.log(`📋 ${newJobs.length} job(s) queued:\n`);
+    for (const j of newJobs) {
+      console.log(`  • [${j.platform}] ${j.title} @ ${j.company || '?'} — ${j.url}`);
+    }
+    console.log('\nRun without --preview to apply.');
+    return;
   }
 
   // Get jobs to process: new + needs_answer (retries)
-  const jobs = getJobsByStatus(['new', 'needs_answer']);
-  console.log(`📋 ${jobs.length} job(s) to process\n`);
+  const allJobs = getJobsByStatus(['new', 'needs_answer']);
+  const jobs = allJobs.slice(0, maxApps);
+  console.log(`📋 ${jobs.length} job(s) to process${allJobs.length > jobs.length ? ` (capped from ${allJobs.length})` : ''}\n`);
 
   if (jobs.length === 0) {
     console.log('Nothing to apply to. Run job_searcher.mjs first.');
@@ -80,7 +92,7 @@ async function main() {
           appendLog({ ...job, status: 'failed', error: e.message?.substring(0, 80) });
           results.failed++;
         }
-        await liBrowser.page.waitForTimeout(2000 + Math.random() * 1000);
+        await liBrowser.page.waitForTimeout(APPLY_BETWEEN_DELAY_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER);
       }
     } catch (e) {
       console.error(`  ❌ LinkedIn browser error: ${e.message}`);
@@ -110,7 +122,7 @@ async function main() {
           appendLog({ ...job, status: 'failed', error: e.message?.substring(0, 80) });
           results.failed++;
         }
-        await wfBrowser.page.waitForTimeout(1500 + Math.random() * 1000);
+        await wfBrowser.page.waitForTimeout(APPLY_BETWEEN_DELAY_WF_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER);
       }
     } catch (e) {
       console.error(`  ❌ Wellfound browser error: ${e.message}`);
@@ -154,7 +166,6 @@ async function handleResult(job, result, results, settings) {
       console.log(`    🚫 Skipped — honeypot question`);
       updateJobStatus(job.id, 'skipped', { notes: 'honeypot', title, company });
       appendLog({ ...job, title, company, status: 'skipped', notes: 'honeypot' });
-      results.skipped++;
       break;
 
     case 'skipped_recruiter_only':

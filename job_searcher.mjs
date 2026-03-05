@@ -16,6 +16,7 @@ import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
+import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 
 async function main() {
   console.log('🔍 claw-apply: Job Searcher starting\n');
@@ -26,7 +27,7 @@ async function main() {
 
   // First run detection: if queue is empty, use first_run_days lookback
   const isFirstRun = loadQueue().length === 0;
-  const lookbackDays = isFirstRun ? (searchConfig.first_run_days || 90) : null;
+  const lookbackDays = isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : null;
   if (isFirstRun) console.log(`📅 First run — looking back ${lookbackDays} days\n`);
 
   let totalAdded = 0;
