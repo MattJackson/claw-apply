@@ -1,0 +1,40 @@
+{
+  "_note": "Configure your job searches here. Each search runs on both listed platforms.",
+  "searches": [
+    {
+      "name": "Founding GTM",
+      "track": "gtm",
+      "keywords": [
+        "founding account executive",
+        "first sales hire",
+        "first GTM hire",
+        "founding AE",
+        "head of sales startup remote"
+      ],
+      "platforms": ["linkedin", "wellfound"],
+      "filters": {
+        "remote": true,
+        "posted_within_days": 2
+      },
+      "exclude_keywords": ["BDR", "SDR", "staffing", "insurance", "retail", "consumer", "recruiter", "DataAnnotation"],
+      "salary_min": 130000
+    },
+    {
+      "name": "Enterprise AE",
+      "track": "ae",
+      "keywords": [
+        "enterprise account executive SaaS remote",
+        "senior account executive technical SaaS remote",
+        "enterprise AE data infrastructure cloud"
+      ],
+      "platforms": ["linkedin"],
+      "filters": {
+        "remote": true,
+        "posted_within_days": 2,
+        "easy_apply_only": true
+      },
+      "exclude_keywords": ["BDR", "SDR", "SMB", "staffing", "retail", "DataAnnotation"],
+      "salary_min": 150000
+    }
+  ]
+}

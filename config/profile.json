@@ -1,0 +1,21 @@
+{
+  "name": { "first": "Jane", "last": "Smith" },
+  "email": "jane@example.com",
+  "phone": "555-123-4567",
+  "location": {
+    "city": "San Francisco",
+    "state": "California",
+    "zip": "94102",
+    "country": "United States"
+  },
+  "linkedin_url": "https://linkedin.com/in/janesmith",
+  "resume_path": "/home/user/resume.pdf",
+  "years_experience": 7,
+  "work_authorization": {
+    "authorized": true,
+    "requires_sponsorship": false
+  },
+  "willing_to_relocate": false,
+  "desired_salary": 150000,
+  "cover_letter": "Your cover letter text here. Keep it to 3-4 sentences — why you, why this type of role, one proof point."
+}

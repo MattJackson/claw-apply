@@ -1,0 +1,10 @@
+[
+  { "pattern": "sponsor", "answer": "No", "note": "Work authorization — no sponsorship needed" },
+  { "pattern": "authorized.*work", "answer": "Yes", "note": "Authorized to work in US" },
+  { "pattern": "legally.*work", "answer": "Yes" },
+  { "pattern": "relocat", "answer": "No" },
+  { "pattern": "remote.*willing", "answer": "Yes" },
+  { "pattern": "start date", "answer": "Immediately" },
+  { "pattern": "notice period", "answer": "2 weeks" },
+  { "pattern": "degree|bachelor", "answer": "No" }
+]

@@ -1,0 +1,25 @@
+{
+  "_note": "Main settings for claw-apply. Fill in your values and run: node setup.mjs",
+  "mode": "A",
+  "review_window_minutes": 30,
+  "schedules": {
+    "search": "0 * * * *",
+    "apply": "0 */6 * * *"
+  },
+  "max_applications_per_run": 50,
+  "notifications": {
+    "telegram_user_id": "YOUR_TELEGRAM_USER_ID",
+    "bot_token": "YOUR_TELEGRAM_BOT_TOKEN"
+  },
+  "kernel": {
+    "proxy_id": "YOUR_KERNEL_PROXY_ID",
+    "profiles": {
+      "linkedin": "LinkedIn-YourName",
+      "wellfound": "WellFound-YourName"
+    }
+  },
+  "browser": {
+    "provider": "kernel",
+    "playwright_path": null
+  }
+}
