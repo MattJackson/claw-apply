@@ -50,7 +50,10 @@ async function main() {
     return;
   }
 
-  const results = { submitted: 0, skipped: 0, failed: 0, needs_answer: 0, total: jobs.length };
+  const results = {
+    submitted: 0, failed: 0, needs_answer: 0, total: jobs.length,
+    skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0
+  };
 
   // Group by platform
   const liJobs = jobs.filter(j => j.platform === 'linkedin');
@@ -154,12 +157,27 @@ async function handleResult(job, result, results, settings) {
       results.skipped++;
       break;
 
+    case 'skipped_recruiter_only':
+      console.log(`    ⏭️  Skipped — recruiter-only ("I'm interested")`);
+      updateJobStatus(job.id, 'skipped_recruiter_only', { title, company });
+      appendLog({ ...job, title, company, status: 'skipped_recruiter_only' });
+      results.skipped_recruiter++;
+      break;
+
+    case 'skipped_external_unsupported':
+      console.log(`    ⏭️  Skipped — external ATS (not yet supported)`);
+      updateJobStatus(job.id, 'skipped_external_unsupported', { title, company });
+      appendLog({ ...job, title, company, status: 'skipped_external_unsupported' });
+      results.skipped_external++;
+      break;
+
+    case 'skipped_easy_apply_unsupported':
     case 'no_easy_apply':
     case 'no_button':
-      console.log(`    ⏭️  Skipped — no apply button`);
-      updateJobStatus(job.id, 'skipped', { notes: status, title, company });
-      appendLog({ ...job, title, company, status: 'skipped', notes: status });
-      results.skipped++;
+      console.log(`    ⏭️  Skipped — no Easy Apply`);
+      updateJobStatus(job.id, 'skipped_easy_apply_unsupported', { title, company });
+      appendLog({ ...job, title, company, status: 'skipped_easy_apply_unsupported' });
+      results.skipped_no_easy_apply++;
       break;
 
     default:
