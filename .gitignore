@@ -1,0 +1,12 @@
+node_modules/
+
+# Runtime data — never commit
+data/jobs_queue.json
+data/applications_log.json
+
+# User config — contains credentials, never commit
+config/settings.json
+config/profile.json
+config/answers.json
+
+# Templates are committed instead (see config/*.example.json)
