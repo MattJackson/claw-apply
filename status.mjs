@@ -27,6 +27,40 @@ function readLastRun(name) {
   return readJson(path);
 }
 
+function buildSearchProgress() {
+  const sp = readJson(resolve(__dir, 'data/search_progress.json'));
+  if (!sp) return null;
+
+  // Build unique track list from completed + keyword_progress, prefer platform-specific key
+  const seen = new Set();
+  const tracks = [];
+
+  const allKeys = [
+    ...(sp.completed || []),
+    ...Object.keys(sp.keyword_progress || {}),
+    ...Object.keys(sp.keywords || {}),
+  ];
+
+  for (const key of allKeys) {
+    const [platform, ...trackParts] = key.split(':');
+    const trackName = trackParts.join(':');
+    if (seen.has(trackName)) continue;
+    seen.add(trackName);
+
+    const keywords = sp.keywords?.[key] || [];
+    const lastDone = sp.keyword_progress?.[key] ?? -1;
+    const complete = (sp.completed || []).includes(key);
+
+    tracks.push({
+      platform, track: trackName,
+      total: keywords.length,
+      done: complete ? keywords.length : Math.max(0, lastDone + 1),
+      complete,
+    });
+  }
+  return tracks;
+}
+
 function buildStatus() {
   const queue = readJson(resolve(__dir, 'data/jobs_queue.json')) || [];
   const log   = readJson(resolve(__dir, 'data/applications_log.json')) || [];
@@ -62,11 +96,13 @@ function buildStatus() {
 
   const searcherLastRun = readLastRun('searcher');
   const applierLastRun  = readLastRun('applier');
+  const searchProgress  = buildSearchProgress();
 
   return {
     searcher: {
       running: isRunning('searcher'),
       last_run: searcherLastRun,
+      keyword_progress: searchProgress,
     },
     applier: {
       running: isRunning('applier'),
@@ -137,6 +173,16 @@ function formatReport(s) {
     `🔍 *Searcher:* ${searcherLine}`,
   ];
   if (lastRunDetail) lines.push(lastRunDetail);
+
+  // Keyword progress per track
+  const kp = s.searcher.keyword_progress;
+  if (kp && kp.length > 0) {
+    for (const t of kp) {
+      const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0;
+      const bar = t.complete ? '✅' : `${t.done}/${t.total} (${pct}%)`;
+      lines.push(`  • ${t.track}: ${bar}`);
+    }
+  }
 
   lines.push(`🚀 *Applier:* ${applierLine}`);
   if (lastApplierDetail) lines.push(lastApplierDetail);
