@@ -98,11 +98,26 @@ function buildStatus() {
   const applierLastRun  = readLastRun('applier');
   const searchProgress  = buildSearchProgress();
 
+  // Filter state
+  const filterState     = readJson(resolve(__dir, 'data/filter_state.json'));
+  const filterRuns      = readJson(resolve(__dir, 'data/filter_runs.json')) || [];
+  const lastFilterRun   = filterRuns.length > 0 ? filterRuns[filterRuns.length - 1] : null;
+  const unscored        = queue.filter(j => j.status === 'new' && j.filter_score == null).length;
+
   return {
     searcher: {
       running: isRunning('searcher'),
       last_run: searcherLastRun,
       keyword_progress: searchProgress,
+    },
+    filter: {
+      batch_pending: !!filterState,
+      batch_id: filterState?.batch_id || null,
+      submitted_at: filterState?.submitted_at || null,
+      batch_job_count: filterState?.job_count || null,
+      model: filterState?.model || lastFilterRun?.model || null,
+      last_run: lastFilterRun,
+      unscored,
     },
     applier: {
       running: isRunning('applier'),
@@ -193,6 +208,21 @@ function formatReport(s) {
     }
   }
 
+  // Filter section
+  const fr = s.filter;
+  let filterLine;
+  if (fr.batch_pending) {
+    filterLine = `⏳ Batch in flight — ${fr.batch_job_count} jobs, submitted ${timeAgo(new Date(fr.submitted_at).getTime())}`;
+  } else if (fr.last_run) {
+    const lr = fr.last_run;
+    filterLine = `⏸️  Last ran ${timeAgo(new Date(lr.collected_at).getTime())} — ✅ ${lr.passed} passed, 🚫 ${lr.filtered} filtered`;
+  } else {
+    filterLine = fr.unscored > 0 ? `🟡 ${fr.unscored} jobs awaiting filter` : `⏸️  Never run`;
+  }
+  if (fr.model) filterLine += ` (${fr.model.replace('claude-', '').replace(/-\d{8}$/, '')})`;
+  if (fr.unscored > 0 && !fr.batch_pending) filterLine += ` · ${fr.unscored} unscored`;
+
+  lines.push(`🔬 *Filter:* ${filterLine}`);
   lines.push(`🚀 *Applier:* ${applierLine}`);
   if (lastApplierDetail) lines.push(lastApplierDetail);
 
