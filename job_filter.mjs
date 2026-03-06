@@ -23,7 +23,7 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
-import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue } from './lib/queue.mjs';
 import { loadProfile, submitBatch, checkBatch, downloadResults } from './lib/filter.mjs';
 import { sendTelegram } from './lib/notify.mjs';
 
@@ -144,8 +144,7 @@ async function collect(state, settings) {
     }
   }
 
-  // Single write for all 4,652 updates
-  const { saveQueue } = await import('./lib/queue.mjs');
+  // Single write for all updates
   saveQueue(queue);
 
   clearState();
@@ -215,7 +214,6 @@ async function submit(settings, searchConfig, candidateProfile) {
   const { batchId, idMap } = await submitBatch(filterable, jobProfilesByTrack, searchConfig, candidateProfile, model, apiKey);
 
   // Stamp each job with the batch ID so they're excluded from future submissions
-  const { saveQueue } = await import('./lib/queue.mjs');
   const allJobs = loadQueue();
   const filteredIds = new Set(filterable.map(j => j.id));
   for (const job of allJobs) {
