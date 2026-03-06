@@ -72,11 +72,18 @@ async function main() {
         const effectiveSearch = lookbackDays
           ? { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } }
           : search;
-        const jobs = await searchLinkedIn(liBrowser.page, effectiveSearch);
-        const added = addJobs(jobs);
-        totalAdded += added;
-        totalSeen += jobs.length;
-        console.log(`  [${search.name}] ${jobs.length} found, ${added} new`);
+        let queryFound = 0, queryAdded = 0;
+        await searchLinkedIn(liBrowser.page, effectiveSearch, {
+          onPage: (pageJobs) => {
+            const added = addJobs(pageJobs);
+            totalAdded += added;
+            totalSeen += pageJobs.length;
+            queryFound += pageJobs.length;
+            queryAdded += added;
+            process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
+          }
+        });
+        console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
       }
 
       platformsRun.push('LinkedIn');
@@ -101,11 +108,18 @@ async function main() {
         const effectiveSearch = lookbackDays
           ? { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } }
           : search;
-        const jobs = await searchWellfound(wfBrowser.page, effectiveSearch);
-        const added = addJobs(jobs);
-        totalAdded += added;
-        totalSeen += jobs.length;
-        console.log(`  [${search.name}] ${jobs.length} found, ${added} new`);
+        let queryFound = 0, queryAdded = 0;
+        await searchWellfound(wfBrowser.page, effectiveSearch, {
+          onPage: (pageJobs) => {
+            const added = addJobs(pageJobs);
+            totalAdded += added;
+            totalSeen += pageJobs.length;
+            queryFound += pageJobs.length;
+            queryAdded += added;
+            process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
+          }
+        });
+        console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
       }
 
       platformsRun.push('Wellfound');

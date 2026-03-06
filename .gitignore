@@ -11,3 +11,4 @@ config/answers.json
 config/search_config.json
 
 # Templates are committed instead (see config/*.example.json)
+data/*.lock
