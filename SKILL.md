@@ -71,47 +71,65 @@ cp config/search_config.example.json config/search_config.json
 
 **`search_config.json`** — keywords, platforms, location filters, salary filters, exclusions
 
-### 4. Verify
+### 4. Create .env
+
+Create a `.env` file in the project root (gitignored — never commit this):
 
 ```bash
-export KERNEL_API_KEY=your_kernel_api_key
-export ANTHROPIC_API_KEY=your_anthropic_api_key   # optional, for AI keywords
+KERNEL_API_KEY=your_kernel_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key   # optional, for AI keywords
+```
 
+### 5. Verify
+
+```bash
 node setup.mjs
 ```
 
 Setup will:
 - Validate all config files
+- Write `.env` (mode 600) if API keys are set
 - Send a Telegram test message
 - Test LinkedIn + Wellfound logins
-- Auto-register cron jobs (if `OPENCLAW_GATEWAY_URL` + `OPENCLAW_GATEWAY_TOKEN` are set)
 
-### 5. Run manually
+### 6. Schedule with PM2
+
+PM2 is a Node.js process manager that runs the searcher and applier as proper system daemons — no SIGTERM issues, survives reboots.
+
+```bash
+# Install PM2
+npm install -g pm2
+
+# Start both jobs (searcher runs immediately + hourly; applier stopped by default)
+pm2 start ecosystem.config.cjs
+pm2 stop claw-applier   # keep applier off until you're ready
+
+# Survive reboots
+pm2 save
+pm2 startup             # follow the printed command (requires sudo)
+```
+
+**PM2 cheatsheet:**
+```bash
+pm2 list                        # show all jobs + status
+pm2 logs claw-searcher          # tail searcher logs
+pm2 logs claw-applier           # tail applier logs
+pm2 start claw-applier          # enable applier
+pm2 stop claw-applier           # pause applier
+pm2 restart claw-searcher       # restart searcher now
+```
+
+Schedules (set in `ecosystem.config.cjs`):
+- **Searcher**: `0 * * * *` (hourly)
+- **Applier**: `0 */6 * * *` (every 6h) — stopped by default, start when ready
+
+### 7. Run manually
 
 ```bash
 node job_searcher.mjs            # search now
 node job_applier.mjs --preview   # preview queue without applying
 node job_applier.mjs             # apply now
 node status.mjs                  # show queue + run status
-```
-
-### 6. Schedule
-
-**Via OpenClaw** — set env vars before running `setup.mjs`:
-```bash
-export OPENCLAW_GATEWAY_URL=http://localhost:3000
-export OPENCLAW_GATEWAY_TOKEN=your_gateway_token
-node setup.mjs   # registers crons automatically
-```
-
-Crons registered:
-- **Searcher**: `0 * * * *` (hourly), no timeout, enabled by default
-- **Applier**: `0 */6 * * *` (every 6h), no timeout, **disabled by default** — enable when ready
-
-**Via system cron** — add to crontab:
-```
-0 * * * * cd /path/to/claw-apply && KERNEL_API_KEY=xxx node job_searcher.mjs >> /tmp/searcher.log 2>&1
-0 */6 * * * cd /path/to/claw-apply && KERNEL_API_KEY=xxx node job_applier.mjs >> /tmp/applier.log 2>&1
 ```
 
 ## How it works
