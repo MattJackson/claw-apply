@@ -22,7 +22,7 @@ import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
-import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete, saveKeywords, getSavedKeywords } from './lib/search_progress.mjs';
+import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete, saveKeywords, getSavedKeywords, clearProgress } from './lib/search_progress.mjs';
 import { ensureLoggedIn } from './lib/session.mjs';
 
 async function main() {
@@ -195,6 +195,7 @@ async function main() {
   if (totalAdded > 0) await sendTelegram(settings, summary);
 
   writeLastRun(true);
+  clearProgress(); // run finished cleanly — next run starts fresh with new keywords
 
   console.log('\n✅ Search complete');
   return { added: totalAdded, seen: totalSeen };
