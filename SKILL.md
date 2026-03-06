@@ -92,14 +92,15 @@ Setup will:
 - Send a Telegram test message
 - Test LinkedIn + Wellfound logins
 
-### 6. Schedule with cron
+### 6. Schedule with OpenClaw crons
 
-Add to crontab (`crontab -e`):
+Scheduling is managed via OpenClaw cron jobs (not system crontab). Run `setup.mjs` to register them, or add manually:
 
-```
-0 */12 * * * cd /path/to/claw-apply && node job_searcher.mjs >> /tmp/claw-searcher.log 2>&1
-0 */6 * * * cd /path/to/claw-apply && node job_applier.mjs >> /tmp/claw-applier.log 2>&1
-```
+- **Searcher**: `0 */12 * * *` America/Los_Angeles — every 12 hours
+- **Filter**: `30 * * * *` America/Los_Angeles — every hour at :30
+- **Applier**: disabled by default — enable manually when ready
+
+Do not use system crontab (`crontab -e`) — OpenClaw crons provide Telegram delivery, isolated sessions, and proper logging.
 
 The lockfile mechanism ensures only one instance runs at a time — if a searcher is already running, the cron invocation exits immediately.
 
