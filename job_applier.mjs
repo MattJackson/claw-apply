@@ -22,6 +22,7 @@ process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return orig
 import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied } from './lib/queue.mjs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
+import { ensureAuth } from './lib/session.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
 import { applyToJob, supportedTypes } from './lib/apply/index.mjs';
 import { sendTelegram, formatApplySummary } from './lib/notify.mjs';
@@ -135,6 +136,19 @@ async function main() {
       if (platform === 'external') {
         browser = await createBrowser(settings, null); // no profile needed
       } else {
+        // Check auth status before creating browser
+        const connectionIds = settings.kernel?.connection_ids || {};
+        const kernelApiKey = process.env.KERNEL_API_KEY || settings.kernel_api_key;
+        const authResult = await ensureAuth(platform, kernelApiKey, connectionIds);
+        if (!authResult.ok) {
+          console.error(`  ❌ ${platform} auth failed: ${authResult.reason}`);
+          await sendTelegram(settings, `⚠️ *${platform}* auth failed — ${authResult.reason}`).catch(() => {});
+          // Mark all jobs for this platform as needing retry
+          for (const job of platformJobs) {
+            updateJobStatus(job.id, 'new', { retry_reason: 'auth_failed' });
+          }
+          continue;
+        }
         browser = await createBrowser(settings, platform);
         console.log('  ✅ Logged in\n');
       }
