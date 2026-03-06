@@ -312,6 +312,7 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       console.warn(`    ⚠️  Unhandled status: ${status}`);
       updateJobStatus(job.id, status, { title, company });
       appendLog({ ...job, title, company, status });
+      results.skipped_other++;
   }
 }
 
