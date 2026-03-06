@@ -82,13 +82,71 @@ async function main() {
     await wfBrowser?.browser?.close().catch(() => {});
   }
 
+  // Register cron jobs via OpenClaw gateway
+  const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://localhost:3000';
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+  const telegramUserId = settings.notifications?.telegram_user_id;
+  const searchSchedule = settings.schedules?.search || '0 * * * *';
+  const applySchedule = settings.schedules?.apply || '0 */6 * * *';
+  const kernelApiKey = process.env.KERNEL_API_KEY;
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
+
+  if (gatewayToken && telegramUserId) {
+    console.log('\nRegistering cron jobs...');
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${gatewayToken}` };
+
+    const searchJob = {
+      name: 'claw-apply: job searcher',
+      schedule: { kind: 'cron', expr: searchSchedule, tz: settings.timezone || 'America/Los_Angeles' },
+      payload: {
+        kind: 'agentTurn',
+        message: `Run the claw-apply job searcher: \`cd ${__dir} && KERNEL_API_KEY=${kernelApiKey}${anthropicApiKey ? ` ANTHROPIC_API_KEY=${anthropicApiKey}` : ''} node job_searcher.mjs 2>&1\`. Report how many new jobs were found.`,
+        timeoutSeconds: 0,
+      },
+      delivery: { mode: 'announce', to: telegramUserId },
+      sessionTarget: 'isolated',
+      enabled: true,
+    };
+
+    const applyJob = {
+      name: 'claw-apply: job applier',
+      schedule: { kind: 'cron', expr: applySchedule, tz: settings.timezone || 'America/Los_Angeles' },
+      payload: {
+        kind: 'agentTurn',
+        message: `Run the claw-apply job applier: \`cd ${__dir} && KERNEL_API_KEY=${kernelApiKey}${anthropicApiKey ? ` ANTHROPIC_API_KEY=${anthropicApiKey}` : ''} node job_applier.mjs 2>&1\`. Report results.`,
+        timeoutSeconds: 0,
+      },
+      delivery: { mode: 'announce', to: telegramUserId },
+      sessionTarget: 'isolated',
+      enabled: false, // disabled by default — enable when ready
+    };
+
+    try {
+      const sRes = await fetch(`${gatewayUrl}/api/cron/jobs`, { method: 'POST', headers, body: JSON.stringify(searchJob) });
+      const sData = await sRes.json();
+      console.log(sRes.ok ? `  ✅ Searcher cron registered (ID: ${sData.id})` : `  ❌ Searcher cron failed: ${JSON.stringify(sData)}`);
+    } catch (e) {
+      console.log(`  ❌ Searcher cron error: ${e.message}`);
+    }
+
+    try {
+      const aRes = await fetch(`${gatewayUrl}/api/cron/jobs`, { method: 'POST', headers, body: JSON.stringify(applyJob) });
+      const aData = await aRes.json();
+      console.log(aRes.ok ? `  ✅ Applier cron registered, disabled (ID: ${aData.id}) — enable when ready` : `  ❌ Applier cron failed: ${JSON.stringify(aData)}`);
+    } catch (e) {
+      console.log(`  ❌ Applier cron error: ${e.message}`);
+    }
+  } else {
+    console.log('\n⚠️  Skipping cron registration — set OPENCLAW_GATEWAY_URL and OPENCLAW_GATEWAY_TOKEN to auto-register.');
+    console.log('   Or register manually with these schedules:');
+    console.log(`     Search: ${searchSchedule}  (timeoutSeconds: 0)`);
+    console.log(`     Apply:  ${applySchedule}  (timeoutSeconds: 0, start disabled)`);
+  }
+
   console.log('\n🎉 Setup complete. claw-apply is ready.');
   console.log('\nTo run manually:');
   console.log('  node job_searcher.mjs   — search now');
   console.log('  node job_applier.mjs    — apply now');
-  console.log('\nCron schedules (register via OpenClaw):');
-  console.log(`  Search: ${settings.schedules?.search}`);
-  console.log(`  Apply:  ${settings.schedules?.apply}`);
 }
 
 main().catch(e => { console.error('Setup error:', e.message); process.exit(1); });
