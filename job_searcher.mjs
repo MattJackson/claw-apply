@@ -22,7 +22,7 @@ import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
-import { initProgress, isCompleted, markComplete } from './lib/search_progress.mjs';
+import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete } from './lib/search_progress.mjs';
 import { ensureLoggedIn } from './lib/session.mjs';
 
 async function main() {
@@ -112,7 +112,9 @@ async function main() {
           console.log(`  [${search.name}] ✓ already done, skipping`);
           continue;
         }
-        const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } };
+        const keywordStart = getKeywordStart('linkedin', search.name);
+        if (keywordStart > 0) console.log(`  [${search.name}] resuming from keyword ${keywordStart + 1}/${search.keywords.length}`);
+        const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
         await searchLinkedIn(liBrowser.page, effectiveSearch, {
           onPage: (pageJobs) => {
@@ -122,6 +124,9 @@ async function main() {
             queryFound += pageJobs.length;
             queryAdded += added;
             process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
+          },
+          onKeyword: (ki) => {
+            markKeywordComplete('linkedin', search.name, keywordStart + ki);
           }
         });
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
