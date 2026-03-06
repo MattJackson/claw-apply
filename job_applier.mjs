@@ -65,7 +65,8 @@ async function main() {
 
   const results = {
     submitted: 0, failed: 0, needs_answer: 0, total: jobs.length,
-    skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0
+    skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0,
+    atsCounts: {}
   };
 
   // Group by platform
@@ -173,10 +174,11 @@ async function handleResult(job, result, results, settings) {
     case 'skipped_external_unsupported': {
       const atsUrl = result.externalUrl || '';
       const atsDomain = atsUrl ? (new URL(atsUrl).hostname.replace('www.', '').split('.')[0]) : 'unknown';
-      console.log(`    ⏭️  Skipped — external ATS: ${atsDomain || 'unknown'}`);
+      console.log(`    ⏭️  Skipped — external ATS: ${atsDomain}`);
       updateJobStatus(job.id, 'skipped_external_unsupported', { title, company, ats_url: atsUrl, ats_platform: atsDomain });
       appendLog({ ...job, title, company, status: 'skipped_external_unsupported', ats_url: atsUrl, ats_platform: atsDomain });
       results.skipped_external++;
+      results.atsCounts[atsDomain] = (results.atsCounts[atsDomain] || 0) + 1;
       break;
     }
 
