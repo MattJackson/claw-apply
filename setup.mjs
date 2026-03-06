@@ -4,25 +4,21 @@
  * Verifies config, tests logins, registers cron jobs
  * Run once after configuring: node setup.mjs
  */
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { loadConfig } from './lib/queue.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const cfg = p => {
-  const path = resolve(__dir, p);
-  if (!existsSync(path)) { console.error(`❌ Missing: ${p}`); process.exit(1); }
-  return JSON.parse(readFileSync(path, 'utf8'));
-};
 
 async function main() {
   console.log('🛠️  claw-apply setup\n');
 
   // Check configs
   console.log('Checking config files...');
-  const settings = cfg('config/settings.json');
-  const profile = cfg('config/profile.json');
-  const searchConfig = cfg('config/search_config.json');
+  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  const profile = loadConfig(resolve(__dir, 'config/profile.json'));
+  const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
 
   const checks = [
     [profile.name?.first && profile.name?.last, 'profile.json: name'],

@@ -4,7 +4,7 @@
  * Reads jobs queue and applies to each new/needs_answer job
  * Run via cron or manually: node job_applier.mjs [--preview]
  */
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
