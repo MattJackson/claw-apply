@@ -15,6 +15,7 @@ import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
+import { generateKeywords } from './lib/keywords.mjs';
 
 async function main() {
   console.log('🔍 claw-apply: Job Searcher starting\n');
@@ -24,6 +25,25 @@ async function main() {
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
 
   // First run detection: if queue is empty, use first_run_days lookback
+  const profile = loadConfig(resolve(__dir, 'config/profile.json'));
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
+
+  // Enhance keywords with AI if API key available
+  if (anthropicKey) {
+    console.log('🤖 Generating AI-enhanced search keywords...');
+    for (const search of searchConfig.searches) {
+      try {
+        const aiKeywords = await generateKeywords(search, profile, anthropicKey);
+        const merged = [...new Set([...search.keywords, ...aiKeywords])];
+        console.log(`  [${search.name}] ${search.keywords.length} → ${merged.length} keywords`);
+        search.keywords = merged;
+      } catch (e) {
+        console.warn(`  [${search.name}] AI keywords failed, using static: ${e.message}`);
+      }
+    }
+    console.log('');
+  }
+
   const isFirstRun = loadQueue().length === 0;
   const lookbackDays = isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : null;
   if (isFirstRun) console.log(`📅 First run — looking back ${lookbackDays} days\n`);
