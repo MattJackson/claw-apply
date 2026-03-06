@@ -337,8 +337,9 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
     case 'stuck':
     case 'incomplete': {
       const retries = (job.retry_count || 0) + 1;
-      if (retries <= maxRetries) {
-        console.log(`    ⏭️  ${status} — will retry (attempt ${retries}/${maxRetries})`);
+      const maxRetry = settings.max_retries ?? DEFAULT_MAX_RETRIES;
+      if (retries <= maxRetry) {
+        console.log(`    ⏭️  ${status} — will retry (attempt ${retries}/${maxRetry})`);
         updateJobStatus(job.id, 'new', { title, company, retry_count: retries });
       } else {
         console.log(`    ⏭️  ${status} — max retries reached`);
