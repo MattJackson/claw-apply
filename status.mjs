@@ -81,6 +81,7 @@ function buildStatus() {
       skipped_external: byStatus['skipped_external_unsupported'] || 0,
       skipped_recruiter: byStatus['skipped_recruiter_only'] || 0,
       skipped_no_easy_apply: byStatus['skipped_easy_apply_unsupported'] || 0,
+      already_applied: byStatus['already_applied'] || 0,
       by_platform: byPlatform,
     },
     ats_breakdown: atsCounts,
@@ -154,7 +155,7 @@ function formatReport(s) {
 
   lines.push(
     `  ✅ Applied:             ${q.applied}`,
-    `  🔁 Already applied:     ${byStatus['already_applied'] || 0}`,
+    `  🔁 Already applied:     ${q.already_applied || 0}`,
     `  💬 Needs your answer:   ${q.needs_answer}`,
     `  ❌ Failed:              ${q.failed}`,
     `  🚫 Recruiter-only:      ${q.skipped_recruiter}`,
