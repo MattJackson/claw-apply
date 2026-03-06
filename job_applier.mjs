@@ -17,10 +17,14 @@ import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
 import { applyToJob, supportedTypes } from './lib/apply/index.mjs';
-import { sendTelegram, formatApplySummary, formatUnknownQuestion } from './lib/notify.mjs';
+import { sendTelegram, formatApplySummary } from './lib/notify.mjs';
+import { generateAnswer } from './lib/ai_answer.mjs';
 import {
   APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES
 } from './lib/constants.mjs';
+
+// Which apply types are currently enabled
+const ENABLED_APPLY_TYPES = ['easy_apply'];
 
 const isPreview = process.argv.includes('--preview');
 
@@ -37,6 +41,7 @@ async function main() {
   const formFiller = new FormFiller(profile, answers);
   const maxApps = settings.max_applications_per_run || Infinity;
   const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
+  const apiKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
 
   const startedAt = Date.now();
   const results = {
@@ -65,14 +70,16 @@ async function main() {
     return;
   }
 
-  // Get + sort jobs by apply_type priority
+  // Get + sort jobs — only enabled apply types
   const allJobs = getJobsByStatus(['new', 'needs_answer'])
+    .filter(j => ENABLED_APPLY_TYPES.includes(j.apply_type))
     .sort((a, b) => {
       const ap = APPLY_PRIORITY.indexOf(a.apply_type ?? 'unknown_external');
       const bp = APPLY_PRIORITY.indexOf(b.apply_type ?? 'unknown_external');
       return (ap === -1 ? 99 : ap) - (bp === -1 ? 99 : bp);
     });
   const jobs = allJobs.slice(0, maxApps);
+  console.log(`Enabled types: ${ENABLED_APPLY_TYPES.join(', ')}\n`);
   results.total = jobs.length;
 
   if (jobs.length === 0) { console.log('Nothing to apply to. Run job_searcher.mjs first.'); return; }
@@ -123,7 +130,7 @@ async function main() {
 
         try {
           const result = await applyToJob(browser.page, job, formFiller);
-          await handleResult(job, result, results, settings);
+          await handleResult(job, result, results, settings, profile, apiKey);
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);
           if (e.stack) console.error(`    Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
@@ -162,7 +169,7 @@ async function main() {
   return results;
 }
 
-async function handleResult(job, result, results, settings) {
+async function handleResult(job, result, results, settings, profile, apiKey) {
   const { status, meta, pending_question, externalUrl, ats_platform } = result;
   const title = meta?.title || job.title || '?';
   const company = meta?.company || job.company || '?';
@@ -175,13 +182,34 @@ async function handleResult(job, result, results, settings) {
       results.submitted++;
       break;
 
-    case 'needs_answer':
-      console.log(`    💬 Unknown question — sending to Telegram`);
-      updateJobStatus(job.id, 'needs_answer', { title, company, pending_question });
-      appendLog({ ...job, title, company, status: 'needs_answer', pending_question });
-      await sendTelegram(settings, formatUnknownQuestion(job, pending_question?.label || pending_question));
+    case 'needs_answer': {
+      const questionText = pending_question?.label || pending_question || 'Unknown question';
+      console.log(`    💬 Unknown question — asking Claude: "${questionText}"`);
+
+      const aiAnswer = await generateAnswer(questionText, profile, apiKey, { title, company });
+
+      updateJobStatus(job.id, 'needs_answer', {
+        title, company, pending_question,
+        ai_suggested_answer: aiAnswer || null,
+      });
+      appendLog({ ...job, title, company, status: 'needs_answer', pending_question, ai_suggested_answer: aiAnswer });
+
+      const msg = [
+        `❓ *New question* — ${company} / ${title}`,
+        ``,
+        `*Question:* ${questionText}`,
+        ``,
+        aiAnswer
+          ? `*AI answer:*\n${aiAnswer}`
+          : `_AI could not generate an answer._`,
+        ``,
+        `Reply with your answer to store it, or reply *ACCEPT* to use the AI answer.`,
+      ].join('\n');
+
+      await sendTelegram(settings, msg);
       results.needs_answer++;
       break;
+    }
 
     case 'skipped_recruiter_only':
       console.log(`    🚫 Recruiter-only`);
