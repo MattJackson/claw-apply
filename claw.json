@@ -1,0 +1,12 @@
+{
+  "name": "claw-apply",
+  "version": "0.1.0",
+  "description": "Automated job search and application for LinkedIn and Wellfound. Searches for matching roles, applies automatically using stealth browsers, and learns from every unknown question.",
+  "author": "MattJackson",
+  "license": "AGPL-3.0-or-later",
+  "permissions": ["network", "browser", "filesystem", "messaging"],
+  "entry": "SKILL.md",
+  "tags": ["job-search", "automation", "linkedin", "wellfound", "playwright", "apply"],
+  "models": ["claude-*"],
+  "minOpenClawVersion": "0.8.0"
+}
