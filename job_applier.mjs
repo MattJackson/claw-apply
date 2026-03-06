@@ -40,7 +40,7 @@ async function main() {
   const startedAt = Date.now();
   const results = {
     submitted: 0, failed: 0, needs_answer: 0, total: 0,
-    skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0,
+    skipped_recruiter: 0, skipped_external: 0, skipped_no_apply: 0, skipped_other: 0,
     already_applied: 0, atsCounts: {}
   };
 
@@ -201,13 +201,19 @@ async function handleResult(job, result, results, settings) {
 
     case 'skipped_no_apply':
     case 'skipped_easy_apply_unsupported':
+      console.log(`    ⏭️  Skipped — ${status}`);
+      updateJobStatus(job.id, status, { title, company });
+      appendLog({ ...job, title, company, status });
+      results.skipped_no_apply++;
+      break;
+
     case 'skipped_honeypot':
     case 'stuck':
     case 'incomplete':
       console.log(`    ⏭️  Skipped — ${status}`);
       updateJobStatus(job.id, status, { title, company });
       appendLog({ ...job, title, company, status });
-      results.skipped_no_easy_apply++;
+      results.skipped_other++;
       break;
 
     default:

@@ -80,7 +80,8 @@ function buildStatus() {
       needs_answer: byStatus['needs_answer'] || 0,
       skipped_external: byStatus['skipped_external_unsupported'] || 0,
       skipped_recruiter: byStatus['skipped_recruiter_only'] || 0,
-      skipped_no_easy_apply: byStatus['skipped_easy_apply_unsupported'] || 0,
+      skipped_no_apply: (byStatus['skipped_easy_apply_unsupported'] || 0) + (byStatus['skipped_no_apply'] || 0),
+      skipped_other: (byStatus['skipped_honeypot'] || 0) + (byStatus['stuck'] || 0) + (byStatus['incomplete'] || 0),
       already_applied: byStatus['already_applied'] || 0,
       by_platform: byPlatform,
     },
@@ -159,7 +160,8 @@ function formatReport(s) {
     `  💬 Needs your answer:   ${q.needs_answer}`,
     `  ❌ Failed:              ${q.failed}`,
     `  🚫 Recruiter-only:      ${q.skipped_recruiter}`,
-    `  ⏭️  No Easy Apply:       ${q.skipped_no_easy_apply}`,
+    `  ⏭️  No apply button:     ${q.skipped_no_apply}`,
+    `  ⚠️  Other skips:         ${q.skipped_other || 0}`,
     `  🌐 External ATS:        ${q.skipped_external}`,
   );
 

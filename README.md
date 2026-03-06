@@ -202,6 +202,7 @@ claw-apply/
 | `skipped_honeypot` | Honeypot question detected |
 | `skipped_recruiter_only` | LinkedIn recruiter-only listing |
 | `skipped_external_unsupported` | External ATS (Greenhouse, Lever, etc. — stubs ready) |
+| `skipped_easy_apply_unsupported` | LinkedIn job without Easy Apply button |
 | `skipped_no_apply` | No apply button, modal, or submit found on page |
 | `stuck` | Modal progress stalled |
 | `incomplete` | Ran out of modal steps without submitting |
