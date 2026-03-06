@@ -16,6 +16,10 @@
     "profiles": {
       "linkedin": "LinkedIn-YourName",
       "wellfound": "WellFound-YourName"
+    },
+    "connection_ids": {
+      "linkedin": "your-linkedin-connection-id",
+      "wellfound": "your-wellfound-connection-id"
     }
   },
   "browser": {
