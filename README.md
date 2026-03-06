@@ -168,6 +168,7 @@ claw-apply/
 │   ├── linkedin.mjs           LinkedIn search + job classification
 │   ├── wellfound.mjs          Wellfound search
 │   ├── queue.mjs              Job queue and config management
+│   ├── lock.mjs               Process lock to prevent parallel runs
 │   ├── notify.mjs             Telegram notifications with rate limiting
 │   └── apply/
 │       ├── index.mjs          Apply handler registry

@@ -127,7 +127,7 @@ function formatReport(s) {
     ? `🔄 Running now`
     : `⏸️  Last ran ${timeAgo(ar.last_run?.finished_at)}`;
   const lastApplierDetail = ar.last_run && !ar.running
-    ? `  Applied ${ar.last_run.submitted} jobs that run`
+    ? `  Applied ${ar.last_run.submitted} jobs in that run`
     : null;
 
   const lines = [

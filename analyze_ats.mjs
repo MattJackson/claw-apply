@@ -57,7 +57,7 @@ function analyze() {
       }
       default:
         // Count easy apply eligible (status=new on linkedin with easy apply available)
-        if (job.status === 'new' && job.easy_apply) easyApply++;
+        if (job.status === 'new' && job.apply_type === 'easy_apply') easyApply++;
     }
   }
 

@@ -96,7 +96,9 @@ async function main() {
     console.log('🔗 LinkedIn search...');
     let liBrowser;
     try {
+      console.log('  Creating browser...');
       liBrowser = await createBrowser(settings, 'linkedin');
+      console.log('  Browser connected, verifying login...');
       const loggedIn = await ensureLoggedIn(liBrowser.page, liLogin, 'linkedin', settings.kernel_api_key || process.env.KERNEL_API_KEY, settings.kernel?.connection_ids || {});
       if (!loggedIn) throw new Error('LinkedIn not logged in');
       console.log('  ✅ Logged in');
@@ -125,6 +127,7 @@ async function main() {
       platformsRun.push('LinkedIn');
     } catch (e) {
       console.error(`  ❌ LinkedIn error: ${e.message}`);
+      if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
     } finally {
       await liBrowser?.browser?.close().catch(() => {});
     }
@@ -135,7 +138,9 @@ async function main() {
     console.log('\n🌐 Wellfound search...');
     let wfBrowser;
     try {
+      console.log('  Creating browser...');
       wfBrowser = await createBrowser(settings, 'wellfound');
+      console.log('  Browser connected, verifying login...');
       const loggedIn = await ensureLoggedIn(wfBrowser.page, wfLogin, 'wellfound', settings.kernel_api_key || process.env.KERNEL_API_KEY, settings.kernel?.connection_ids || {});
       if (!loggedIn) console.warn('  ⚠️ Wellfound login unconfirmed, proceeding');
       else console.log('  ✅ Logged in');
@@ -164,6 +169,7 @@ async function main() {
       platformsRun.push('Wellfound');
     } catch (e) {
       console.error(`  ❌ Wellfound error: ${e.message}`);
+      if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
     } finally {
       await wfBrowser?.browser?.close().catch(() => {});
     }
@@ -182,5 +188,6 @@ async function main() {
 
 main().catch(e => {
   console.error('Fatal:', e.message);
+  if (e.stack) console.error(e.stack);
   process.exit(1);
 });
