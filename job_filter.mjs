@@ -181,8 +181,8 @@ async function collect(state, settings) {
 async function submit(settings, searchConfig, candidateProfile) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  // Get all new jobs that haven't been scored yet
-  const jobs = getJobsByStatus('new').filter(j => j.filter_score == null);
+  // Get all new jobs that haven't been scored and aren't already in a pending batch
+  const jobs = getJobsByStatus('new').filter(j => j.filter_score == null && !j.filter_batch_id);
 
   if (jobs.length === 0) {
     console.log('✅ Nothing to filter — all new jobs already scored.');
@@ -213,6 +213,15 @@ async function submit(settings, searchConfig, candidateProfile) {
   console.log(`🚀 Submitting batch — ${filterable.length} jobs, model: ${model}`);
 
   const { batchId, idMap } = await submitBatch(filterable, jobProfilesByTrack, searchConfig, candidateProfile, model, apiKey);
+
+  // Stamp each job with the batch ID so they're excluded from future submissions
+  const { saveQueue } = await import('./lib/queue.mjs');
+  const allJobs = loadQueue();
+  const filteredIds = new Set(filterable.map(j => j.id));
+  for (const job of allJobs) {
+    if (filteredIds.has(job.id)) job.filter_batch_id = batchId;
+  }
+  saveQueue(allJobs);
 
   const submittedAt = new Date().toISOString();
   writeState({
