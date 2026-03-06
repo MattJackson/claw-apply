@@ -10,11 +10,13 @@ Automated job search and application. Finds matching roles on LinkedIn and Wellf
 ## Requirements
 
 - Node.js 18+
-- [Kernel](https://kernel.sh) account — stealth browsers + bot detection bypass (required; local Playwright will be blocked)
+- [Kernel](https://kernel.sh) account — stealth browsers + bot detection bypass (required)
 - Kernel CLI: `npm install -g @onkernel/cli`
 - Telegram bot for notifications ([BotFather](https://t.me/BotFather))
 - Anthropic API key (optional — enables AI-enhanced keyword generation)
 - OpenClaw (optional — enables auto-scheduling via `setup.mjs`)
+
+> **Note:** Playwright is installed automatically via `npm install` as a library for browser connectivity. You don't need to install it globally or manage browsers yourself — Kernel handles all browser execution.
 
 ## Setup
 
