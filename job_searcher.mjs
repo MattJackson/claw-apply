@@ -33,6 +33,17 @@ async function main() {
   const platformsRun = [];
   const startedAt = Date.now();
 
+  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+
+  // Send notification even if SIGTERM kills the process mid-run
+  process.once('SIGTERM', async () => {
+    if (totalAdded > 0) {
+      const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun.length ? platformsRun : ['LinkedIn']);
+      await sendTelegram(settings, summary + '\n_(partial run — timed out)_').catch(() => {});
+    }
+    process.exit(0);
+  });
+
   const writeLastRun = (finished = false) => {
     const entry = {
       started_at: startedAt,
@@ -63,7 +74,6 @@ async function main() {
   });
 
   // Load config
-  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
 
   // First run detection: if queue is empty, use first_run_days lookback
