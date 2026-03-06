@@ -23,7 +23,7 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
-import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter } from './lib/queue.mjs';
 import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
 import { sendTelegram } from './lib/notify.mjs';
 
@@ -152,6 +152,11 @@ async function collect(state, settings) {
   }
 
   saveQueue(queue);
+
+  // Dedup cross-track copies — keep highest-scoring version of each job
+  const duped = dedupeAfterFilter();
+  if (duped > 0) console.log(`  Deduped ${duped} cross-track copies`);
+
   clearState();
 
   // Log run
