@@ -1,68 +1,70 @@
 #!/usr/bin/env node
 /**
  * job_applier.mjs — claw-apply Job Applier
- * Reads jobs queue and applies to each new/needs_answer job
+ * Reads jobs queue and applies using the appropriate handler per apply_type
  * Run via cron or manually: node job_applier.mjs [--preview]
  */
 import { existsSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied } from './lib/queue.mjs';
-import { writeFileSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
-import { verifyLogin as liLogin, applyLinkedIn } from './lib/linkedin.mjs';
-import { verifyLogin as wfLogin, applyWellfound } from './lib/wellfound.mjs';
+import { applyToJob, supportedTypes } from './lib/apply/index.mjs';
 import { sendTelegram, formatApplySummary, formatUnknownQuestion } from './lib/notify.mjs';
 import {
-  DEFAULT_REVIEW_WINDOW_MINUTES,
-  APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_WF_BASE,
-  APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES
+  APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES
 } from './lib/constants.mjs';
 
 const isPreview = process.argv.includes('--preview');
 
+// Priority order — Easy Apply first, then by ATS volume (data-driven later)
+const APPLY_PRIORITY = ['easy_apply', 'wellfound', 'greenhouse', 'lever', 'ashby', 'workday', 'jobvite', 'unknown_external'];
+
 async function main() {
   const lock = acquireLock('applier', resolve(__dir, 'data'));
-  lock.onShutdown(() => {
-    writeFileSync(resolve(__dir, 'data/applier_last_run.json'), JSON.stringify({
-      finished_at: null, finished: false, note: 'interrupted'
-    }, null, 2));
-  });
-  console.log('🚀 claw-apply: Job Applier starting\n');
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   const profile = loadConfig(resolve(__dir, 'config/profile.json'));
   const answersPath = resolve(__dir, 'config/answers.json');
   const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];
-
   const formFiller = new FormFiller(profile, answers);
   const maxApps = settings.max_applications_per_run || Infinity;
   const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
 
-  // Preview mode: show queue and exit
+  const startedAt = Date.now();
+  const results = {
+    submitted: 0, failed: 0, needs_answer: 0, total: 0,
+    skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0,
+    already_applied: 0, atsCounts: {}
+  };
+
+  lock.onShutdown(() => {
+    writeFileSync(resolve(__dir, 'data/applier_last_run.json'), JSON.stringify({
+      started_at: startedAt, finished_at: null, finished: false, ...results
+    }, null, 2));
+  });
+
+  console.log('🚀 claw-apply: Job Applier starting\n');
+  console.log(`Supported apply types: ${supportedTypes().join(', ')}\n`);
+
+  // Preview mode
   if (isPreview) {
     const newJobs = getJobsByStatus('new');
-    if (newJobs.length === 0) {
-      console.log('No new jobs in queue.');
-      return;
-    }
+    if (newJobs.length === 0) { console.log('No new jobs in queue.'); return; }
     console.log(`📋 ${newJobs.length} job(s) queued:\n`);
     for (const j of newJobs) {
-      console.log(`  • [${j.platform}] ${j.title} @ ${j.company || '?'} — ${j.url}`);
+      console.log(`  • [${j.apply_type || 'unclassified'}] ${j.title} @ ${j.company || '?'}`);
     }
-    console.log('\nRun without --preview to apply.');
     return;
   }
 
-  // Priority order for apply types
-  const APPLY_PRIORITY = ['easy_apply', 'wellfound_apply', 'greenhouse', 'lever', 'ashby', 'workday', 'unknown_external'];
-
-  // Get jobs to process: new + needs_answer, sorted by apply_type priority
+  // Get + sort jobs by apply_type priority
   const allJobs = getJobsByStatus(['new', 'needs_answer'])
     .sort((a, b) => {
       const ap = APPLY_PRIORITY.indexOf(a.apply_type ?? 'unknown_external');
@@ -70,100 +72,87 @@ async function main() {
       return (ap === -1 ? 99 : ap) - (bp === -1 ? 99 : bp);
     });
   const jobs = allJobs.slice(0, maxApps);
-  const typeSummary = Object.entries(
-    jobs.reduce((acc, j) => { acc[j.apply_type || 'unclassified'] = (acc[j.apply_type || 'unclassified'] || 0) + 1; return acc; }, {})
-  ).map(([k, v]) => `${v} ${k}`).join(', ');
-  console.log(`📋 ${jobs.length} job(s) to process — ${typeSummary}\n`);
+  results.total = jobs.length;
 
-  if (jobs.length === 0) {
-    console.log('Nothing to apply to. Run job_searcher.mjs first.');
-    return;
+  if (jobs.length === 0) { console.log('Nothing to apply to. Run job_searcher.mjs first.'); return; }
+
+  // Print breakdown
+  const typeCounts = jobs.reduce((acc, j) => {
+    acc[j.apply_type || 'unclassified'] = (acc[j.apply_type || 'unclassified'] || 0) + 1;
+    return acc;
+  }, {});
+  console.log(`📋 ${jobs.length} jobs to process:`);
+  for (const [type, count] of Object.entries(typeCounts)) {
+    console.log(`  • ${type}: ${count}`);
+  }
+  console.log('');
+
+  // Group by platform to share browser sessions
+  const byPlatform = {};
+  for (const job of jobs) {
+    const platform = job.apply_type === 'easy_apply' ? 'linkedin'
+      : job.platform === 'wellfound' || job.apply_type === 'wellfound' ? 'wellfound'
+      : 'external'; // Greenhouse, Lever etc. — no auth needed
+    if (!byPlatform[platform]) byPlatform[platform] = [];
+    byPlatform[platform].push(job);
   }
 
-  const results = {
-    submitted: 0, failed: 0, needs_answer: 0, total: jobs.length,
-    skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0,
-    already_applied: 0, atsCounts: {}
-  };
-
-  // Group by platform
-  const liJobs = jobs.filter(j => j.platform === 'linkedin');
-  const wfJobs = jobs.filter(j => j.platform === 'wellfound');
-
-  // --- LinkedIn ---
-  if (liJobs.length > 0) {
-    console.log(`🔗 LinkedIn: ${liJobs.length} jobs\n`);
-    let liBrowser;
+  // Process each platform group
+  for (const [platform, platformJobs] of Object.entries(byPlatform)) {
+    console.log(`\n--- ${platform.toUpperCase()} (${platformJobs.length} jobs) ---\n`);
+    let browser;
     try {
-      liBrowser = await createBrowser(settings, 'linkedin');
-      const loggedIn = await liLogin(liBrowser.page);
-      if (!loggedIn) throw new Error('LinkedIn not logged in');
-      console.log('  ✅ Logged in\n');
+      // LinkedIn and Wellfound need authenticated sessions; external ATS uses plain browser
+      if (platform === 'external') {
+        browser = await createBrowser(settings, null); // no profile needed
+      } else {
+        browser = await createBrowser(settings, platform);
+        console.log('  ✅ Logged in\n');
+      }
 
-      for (const job of liJobs) {
+      for (const job of platformJobs) {
         if (isAlreadyApplied(job.id)) {
           console.log(`  ⏭️  Already applied — ${job.title} @ ${job.company || '?'}`);
           updateJobStatus(job.id, 'already_applied', {});
+          results.already_applied++;
           continue;
         }
-        console.log(`  → ${job.title} @ ${job.company || '?'} [${job.apply_type || 'unclassified'}]`);
+
+        console.log(`  → [${job.apply_type}] ${job.title} @ ${job.company || '?'}`);
+
         try {
-          const result = await applyLinkedIn(liBrowser.page, job, formFiller);
+          const result = await applyToJob(browser.page, job, formFiller);
           await handleResult(job, result, results, settings);
         } catch (e) {
-          handleError(job, e, results, maxRetries);
+          console.error(`    ❌ Error: ${e.message}`);
+          const retries = (job.retry_count || 0) + 1;
+          if (retries <= maxRetries) {
+            updateJobStatus(job.id, 'new', { retry_count: retries });
+          } else {
+            updateJobStatus(job.id, 'failed', { error: e.message });
+            appendLog({ ...job, status: 'failed', error: e.message });
+            results.failed++;
+          }
         }
-        await liBrowser.page.waitForTimeout(APPLY_BETWEEN_DELAY_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER);
+
+        // Delay between applications
+        await new Promise(r => setTimeout(r, APPLY_BETWEEN_DELAY_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER));
       }
     } catch (e) {
-      console.error(`  ❌ LinkedIn browser error: ${e.message}`);
-      results.failed += liJobs.length;
+      console.error(`  ❌ Browser error for ${platform}: ${e.message}`);
     } finally {
-      await liBrowser?.browser?.close().catch(() => {});
+      await browser?.browser?.close().catch(() => {});
     }
   }
 
-  // --- Wellfound ---
-  if (wfJobs.length > 0) {
-    console.log(`\n🌐 Wellfound: ${wfJobs.length} jobs\n`);
-    let wfBrowser;
-    try {
-      wfBrowser = await createBrowser(settings, 'wellfound');
-      await wfLogin(wfBrowser.page);
-      console.log('  ✅ Started\n');
-
-      for (const job of wfJobs) {
-        if (isAlreadyApplied(job.id)) {
-          console.log(`  ⏭️  Already applied — ${job.title} @ ${job.company || '?'}`);
-          updateJobStatus(job.id, 'already_applied', {});
-          continue;
-        }
-        console.log(`  → ${job.title} @ ${job.company || '?'} [${job.apply_type || 'unclassified'}]`);
-        try {
-          const result = await applyWellfound(wfBrowser.page, job, formFiller);
-          await handleResult(job, result, results, settings);
-        } catch (e) {
-          handleError(job, e, results, maxRetries);
-        }
-        await wfBrowser.page.waitForTimeout(APPLY_BETWEEN_DELAY_WF_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER);
-      }
-    } catch (e) {
-      console.error(`  ❌ Wellfound browser error: ${e.message}`);
-      results.failed += wfJobs.length;
-    } finally {
-      await wfBrowser?.browser?.close().catch(() => {});
-    }
-  }
-
-  // Final summary
+  // Final summary + Telegram
   const summary = formatApplySummary(results);
   console.log(`\n${summary.replace(/\*/g, '')}`);
   await sendTelegram(settings, summary);
 
-  // Write last-run metadata for status.mjs
+  // Write last-run metadata
   writeFileSync(resolve(__dir, 'data/applier_last_run.json'), JSON.stringify({
-    finished_at: Date.now(),
-    ...results,
+    started_at: startedAt, finished_at: Date.now(), finished: true, ...results
   }, null, 2));
 
   console.log('\n✅ Apply run complete');
@@ -171,78 +160,56 @@ async function main() {
 }
 
 async function handleResult(job, result, results, settings) {
-  const { status, meta, pending_question } = result;
-  const title = meta?.title || job.title;
-  const company = meta?.company || job.company;
+  const { status, meta, pending_question, externalUrl, ats_platform } = result;
+  const title = meta?.title || job.title || '?';
+  const company = meta?.company || job.company || '?';
 
   switch (status) {
     case 'submitted':
       console.log(`    ✅ Applied!`);
-      updateJobStatus(job.id, 'applied', { applied_at: new Date().toISOString(), title, company });
-      appendLog({ ...job, title, company, status: 'applied', applied_at: new Date().toISOString() });
+      updateJobStatus(job.id, 'applied', { title, company, applied_at: Date.now() });
+      appendLog({ ...job, title, company, status: 'applied', applied_at: Date.now() });
       results.submitted++;
       break;
 
     case 'needs_answer':
-      console.log(`    ❓ Unknown question: "${pending_question}"`);
-      updateJobStatus(job.id, 'needs_answer', { pending_question, title, company });
+      console.log(`    💬 Unknown question — sending to Telegram`);
+      updateJobStatus(job.id, 'needs_answer', { title, company, pending_question });
       appendLog({ ...job, title, company, status: 'needs_answer', pending_question });
-      await sendTelegram(settings, formatUnknownQuestion({ title, company }, pending_question));
+      await sendTelegram(settings, formatUnknownQuestion(job, pending_question?.label || pending_question));
       results.needs_answer++;
       break;
 
-    case 'skipped_honeypot':
-      console.log(`    🚫 Skipped — honeypot question`);
-      updateJobStatus(job.id, 'skipped', { notes: 'honeypot', title, company });
-      appendLog({ ...job, title, company, status: 'skipped', notes: 'honeypot' });
-      break;
-
     case 'skipped_recruiter_only':
-      console.log(`    ⏭️  Skipped — recruiter-only ("I'm interested")`);
+      console.log(`    🚫 Recruiter-only`);
       updateJobStatus(job.id, 'skipped_recruiter_only', { title, company });
       appendLog({ ...job, title, company, status: 'skipped_recruiter_only' });
       results.skipped_recruiter++;
       break;
 
     case 'skipped_external_unsupported': {
-      const atsUrl = result.externalUrl || '';
-      const atsDomain = atsUrl ? (new URL(atsUrl).hostname.replace('www.', '').split('.')[0]) : 'unknown';
-      console.log(`    ⏭️  Skipped — external ATS: ${atsDomain}`);
-      updateJobStatus(job.id, 'skipped_external_unsupported', { title, company, ats_url: atsUrl, ats_platform: atsDomain });
-      appendLog({ ...job, title, company, status: 'skipped_external_unsupported', ats_url: atsUrl, ats_platform: atsDomain });
+      const platform = ats_platform || job.apply_type || 'unknown';
+      console.log(`    ⏭️  External ATS: ${platform}`);
+      updateJobStatus(job.id, 'skipped_external_unsupported', { title, company, ats_url: externalUrl, ats_platform: platform });
+      appendLog({ ...job, title, company, status: 'skipped_external_unsupported', ats_url: externalUrl, ats_platform: platform });
       results.skipped_external++;
-      results.atsCounts[atsDomain] = (results.atsCounts[atsDomain] || 0) + 1;
+      results.atsCounts[platform] = (results.atsCounts[platform] || 0) + 1;
       break;
     }
 
     case 'skipped_easy_apply_unsupported':
-    case 'no_easy_apply':
-    case 'no_button':
-      console.log(`    ⏭️  Skipped — no Easy Apply`);
-      updateJobStatus(job.id, 'skipped_easy_apply_unsupported', { title, company });
-      appendLog({ ...job, title, company, status: 'skipped_easy_apply_unsupported' });
+    case 'skipped_honeypot':
+    case 'stuck':
+    case 'incomplete':
+    case 'no_modal':
+      console.log(`    ⏭️  Skipped — ${status}`);
+      updateJobStatus(job.id, status, { title, company });
+      appendLog({ ...job, title, company, status });
       results.skipped_no_easy_apply++;
       break;
 
     default:
-      console.log(`    ⚠️  ${status}`);
-      updateJobStatus(job.id, 'failed', { notes: status, title, company });
-      appendLog({ ...job, title, company, status: 'failed', notes: status });
-      results.failed++;
-  }
-}
-
-function handleError(job, e, results, maxRetries) {
-  const msg = e.message?.substring(0, 80);
-  const retries = (job.retry_count || 0) + 1;
-  if (retries <= maxRetries) {
-    console.log(`    ⚠️  Error (retry ${retries}/${maxRetries}): ${msg}`);
-    updateJobStatus(job.id, 'new', { retry_count: retries, last_error: msg });
-  } else {
-    console.log(`    ❌ Error (max retries reached): ${msg}`);
-    updateJobStatus(job.id, 'failed', { retry_count: retries, notes: msg });
-    appendLog({ ...job, status: 'failed', error: msg });
-    results.failed++;
+      console.log(`    ⚠️  Unknown status: ${status}`);
   }
 }
 
