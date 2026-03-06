@@ -198,10 +198,13 @@ claw-apply/
 | `applied` | Successfully submitted |
 | `needs_answer` | Blocked on unknown question, waiting for your reply |
 | `failed` | Failed after max retries |
-| `skipped` | Honeypot detected |
+| `already_applied` | Duplicate detected, previously applied |
+| `skipped_honeypot` | Honeypot question detected |
 | `skipped_recruiter_only` | LinkedIn recruiter-only listing |
-| `skipped_external_unsupported` | External ATS (Greenhouse, Lever — not yet supported) |
-| `skipped_easy_apply_unsupported` | No Easy Apply button available |
+| `skipped_external_unsupported` | External ATS (Greenhouse, Lever, etc. — stubs ready) |
+| `skipped_no_apply` | No apply button, modal, or submit found on page |
+| `stuck` | Modal progress stalled |
+| `incomplete` | Ran out of modal steps without submitting |
 
 ## Roadmap
 

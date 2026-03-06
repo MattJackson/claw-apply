@@ -199,11 +199,11 @@ async function handleResult(job, result, results, settings) {
       break;
     }
 
+    case 'skipped_no_apply':
     case 'skipped_easy_apply_unsupported':
     case 'skipped_honeypot':
     case 'stuck':
     case 'incomplete':
-    case 'no_modal':
       console.log(`    ⏭️  Skipped — ${status}`);
       updateJobStatus(job.id, status, { title, company });
       appendLog({ ...job, title, company, status });
@@ -211,7 +211,9 @@ async function handleResult(job, result, results, settings) {
       break;
 
     default:
-      console.log(`    ⚠️  Unknown status: ${status}`);
+      console.warn(`    ⚠️  Unhandled status: ${status}`);
+      updateJobStatus(job.id, status, { title, company });
+      appendLog({ ...job, title, company, status });
   }
 }
 
