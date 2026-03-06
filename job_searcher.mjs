@@ -249,9 +249,9 @@ async function main() {
 }
 
 main().then(() => {
-  logStream.end(() => process.exit(0));
+  process.exit(0);
 }).catch(e => {
   console.error('Fatal:', e.message);
   if (e.stack) console.error(e.stack);
-  logStream.end(() => process.exit(1));
+  process.exit(1);
 });
