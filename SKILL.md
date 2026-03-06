@@ -97,8 +97,10 @@ Scheduling is managed via OpenClaw cron jobs (not system crontab):
 |-----|----------|-------------|
 | Searcher | `0 */12 * * *` America/Los_Angeles | Search every 12 hours |
 | Filter | `30 * * * *` America/Los_Angeles | AI filter every hour at :30 |
-| Applier | `*/5 * * * *` America/Los_Angeles | 1 job per run, silent (no Telegram noise) |
+| Applier | `*/3 * * * *` America/Los_Angeles | 1 job per run, silent (no Telegram noise) |
 | Telegram Poller | `* * * * *` America/Los_Angeles | Process answer replies every minute |
+
+**Rate limiting:** LinkedIn enforces a minimum ~3 minutes between applications. The applier processes 1 job per run (`max_applications_per_run: 1` in settings.json) — control pacing via the cron interval. Running more frequently or processing multiple jobs per run risks account lockout.
 
 **Notification defaults:** all crons use `delivery: none`. The scripts send their own Telegram summaries directly — no need for OpenClaw cron announcements on top.
 
