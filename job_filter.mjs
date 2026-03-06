@@ -114,9 +114,13 @@ async function collect(state, settings) {
   // All done — download and merge all results
   console.log('\n  All batches complete. Downloading results...');
   const resultMap = {};
+  let totalCost = 0;
+  const totalUsage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   for (const b of batches) {
-    const results = await downloadResults(b.batchId, apiKey, b.idMap || {});
+    const { results, usage, cost } = await downloadResults(b.batchId, apiKey, b.idMap || {});
     for (const r of results) resultMap[r.jobId] = r;
+    totalCost += cost;
+    for (const [k, v] of Object.entries(usage)) totalUsage[k] = (totalUsage[k] || 0) + v;
   }
 
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
@@ -170,10 +174,12 @@ async function collect(state, settings) {
     passed,
     filtered,
     errors,
+    cost_usd: Math.round(totalCost * 100) / 100,
+    usage: totalUsage,
   });
   writeFileSync(runsPath, JSON.stringify(runs, null, 2));
 
-  const summary = `✅ Filter complete — ${passed} passed, ${filtered} filtered, ${errors} errors`;
+  const summary = `✅ Filter complete — ${passed} passed, ${filtered} filtered, ${errors} errors (est. cost: $${totalCost.toFixed(2)})`;
   console.log(`\n${summary}`);
 
   await sendTelegram(settings,
