@@ -95,13 +95,9 @@ async function main() {
   }
 
   console.log('\n🎉 Setup complete. claw-apply is ready.');
-  console.log('\nNext: start the scheduler with PM2:');
-  console.log('  npm install -g pm2');
-  console.log('  pm2 start ecosystem.config.cjs');
-  console.log('  pm2 stop claw-applier      # keep off until ready to apply');
-  console.log('  pm2 save && pm2 startup    # survive reboots');
-  console.log('\nRun manually:');
+  console.log('\nScheduling is managed by OpenClaw crons. Run manually:');
   console.log('  node job_searcher.mjs      — search now');
+  console.log('  node job_filter.mjs        — filter/score jobs');
   console.log('  node job_applier.mjs       — apply now');
   console.log('  node status.mjs            — queue + run status');
 }

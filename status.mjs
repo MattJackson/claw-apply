@@ -82,13 +82,6 @@ function buildStatus() {
     }
   }
 
-  // From log too
-  for (const entry of log) {
-    if (entry.status === 'skipped_external_unsupported' && entry.ats_platform) {
-      atsCounts[entry.ats_platform] = (atsCounts[entry.ats_platform] || 0) + 1;
-    }
-  }
-
   // Last applied
   const applied = [...queue, ...log].filter(j => j.status === 'applied')
     .sort((a, b) => (b.applied_at || 0) - (a.applied_at || 0));
