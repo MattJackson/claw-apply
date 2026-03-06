@@ -170,12 +170,15 @@ async function handleResult(job, result, results, settings) {
       results.skipped_recruiter++;
       break;
 
-    case 'skipped_external_unsupported':
-      console.log(`    ⏭️  Skipped — external ATS (not yet supported)`);
-      updateJobStatus(job.id, 'skipped_external_unsupported', { title, company });
-      appendLog({ ...job, title, company, status: 'skipped_external_unsupported' });
+    case 'skipped_external_unsupported': {
+      const atsUrl = result.externalUrl || '';
+      const atsDomain = atsUrl ? (new URL(atsUrl).hostname.replace('www.', '').split('.')[0]) : 'unknown';
+      console.log(`    ⏭️  Skipped — external ATS: ${atsDomain || 'unknown'}`);
+      updateJobStatus(job.id, 'skipped_external_unsupported', { title, company, ats_url: atsUrl, ats_platform: atsDomain });
+      appendLog({ ...job, title, company, status: 'skipped_external_unsupported', ats_url: atsUrl, ats_platform: atsDomain });
       results.skipped_external++;
       break;
+    }
 
     case 'skipped_easy_apply_unsupported':
     case 'no_easy_apply':
