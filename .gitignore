@@ -16,3 +16,9 @@ config/search_config.json
 
 # Templates are committed instead (see config/*.example.json)
 data/*.lock
+test_dry_run.mjs
+test_full_flow.mjs
+test_modal_diag.mjs
+test_labels.mjs
+test_buttons.mjs
+test_submit.mjs
