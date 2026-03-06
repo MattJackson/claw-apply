@@ -1,6 +1,6 @@
 {
   "name": "claw-apply",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Automated job search and application for LinkedIn and Wellfound",
   "type": "module",
   "scripts": {
