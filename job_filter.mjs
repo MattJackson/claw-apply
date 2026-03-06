@@ -26,11 +26,11 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter } from './lib/queue.mjs';
 import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
 import { sendTelegram } from './lib/notify.mjs';
+import { DEFAULT_FILTER_MODEL, DEFAULT_FILTER_MIN_SCORE } from './lib/constants.mjs';
 
 const isStats = process.argv.includes('--stats');
 
 const STATE_PATH = resolve(__dir, 'data/filter_state.json');
-const DEFAULT_MODEL = 'claude-sonnet-4-6-20251101';
 
 // ---------------------------------------------------------------------------
 // State helpers
@@ -69,9 +69,10 @@ function showStats() {
 
   const state = readState();
   if (state) {
-    console.log(`  Pending batch: ${state.batch_id}`);
-    console.log(`  Submitted:     ${state.submitted_at}`);
-    console.log(`  Job count:     ${state.job_count}\n`);
+    const batchIds = state.batches?.map(b => b.batchId).join(', ') || 'none';
+    console.log(`  Pending batches: ${batchIds}`);
+    console.log(`  Submitted:       ${state.submitted_at}`);
+    console.log(`  Job count:       ${state.job_count}\n`);
   }
 
   if (filtered.length > 0) {
@@ -97,7 +98,7 @@ async function collect(state, settings) {
     b._status = status;
     b._counts = counts;
     if (status === 'in_progress') {
-      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      const total = Object.values(counts).reduce((a, v) => a + v, 0);
       const done = (counts.succeeded || 0) + (counts.errored || 0) + (counts.canceled || 0) + (counts.expired || 0);
       console.log(`  [${b.track}] Still processing — ${done}/${total} complete`);
       allDone = false;
@@ -124,7 +125,7 @@ async function collect(state, settings) {
   }
 
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
-  const globalMin = searchConfig.filter_min_score ?? 5;
+  const globalMin = searchConfig.filter_min_score ?? DEFAULT_FILTER_MIN_SCORE;
 
   let passed = 0, filtered = 0, errors = 0;
   const queue = loadQueue();
@@ -222,7 +223,7 @@ async function submit(settings, searchConfig, candidateProfile) {
     return;
   }
 
-  const model = settings.filter?.model || DEFAULT_MODEL;
+  const model = settings.filter?.model || DEFAULT_FILTER_MODEL;
   const submittedAt = new Date().toISOString();
   console.log(`🚀 Submitting batches — ${filterable.length} jobs across ${Object.keys(jobProfilesByTrack).length} tracks, model: ${model}`);
 

@@ -6,8 +6,7 @@
  */
 import { loadEnv } from './lib/env.mjs';
 loadEnv(); // load .env before anything else
-/**
- */
+
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -35,15 +34,6 @@ async function main() {
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
 
-  // Send notification even if SIGTERM kills the process mid-run
-  process.once('SIGTERM', async () => {
-    if (totalAdded > 0) {
-      const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun.length ? platformsRun : ['LinkedIn']);
-      await sendTelegram(settings, summary + '\n_(partial run — timed out)_').catch(() => {});
-    }
-    process.exit(0);
-  });
-
   const writeLastRun = (finished = false) => {
     const entry = {
       started_at: startedAt,
@@ -68,9 +58,13 @@ async function main() {
     writeFileSync(runsPath, JSON.stringify(runs, null, 2));
   };
 
-  lock.onShutdown(() => {
+  lock.onShutdown(async () => {
     console.log('  Writing partial results to last-run file...');
     writeLastRun(false);
+    if (totalAdded > 0) {
+      const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun.length ? platformsRun : ['LinkedIn']);
+      await sendTelegram(settings, summary + '\n_(partial run — interrupted)_').catch(() => {});
+    }
   });
 
   // Load config

@@ -92,40 +92,16 @@ Setup will:
 - Send a Telegram test message
 - Test LinkedIn + Wellfound logins
 
-### 6. Schedule with PM2
-
-PM2 is a Node.js process manager that runs the searcher and applier as proper system daemons — no SIGTERM issues, survives reboots.
-
-```bash
-# Install PM2
-npm install -g pm2
-
-# Start both jobs (searcher runs immediately + hourly; applier stopped by default)
-pm2 start ecosystem.config.cjs
-pm2 stop claw-applier   # keep applier off until you're ready
-
-# Survive reboots
-pm2 save
-pm2 startup             # follow the printed command (requires sudo)
-```
-
-PM2 manages the processes but **does not schedule them** — scheduling is handled by system cron. This ensures a running searcher is never killed mid-run. If it's already running, the cron invocation hits the lockfile and exits immediately.
+### 6. Schedule with cron
 
 Add to crontab (`crontab -e`):
+
 ```
 0 */12 * * * cd /path/to/claw-apply && node job_searcher.mjs >> /tmp/claw-searcher.log 2>&1
 0 */6 * * * cd /path/to/claw-apply && node job_applier.mjs >> /tmp/claw-applier.log 2>&1
 ```
 
-**PM2 cheatsheet:**
-```bash
-pm2 list                        # show all processes + status
-pm2 logs claw-searcher          # tail searcher logs
-pm2 logs claw-applier           # tail applier logs
-pm2 start claw-searcher         # run searcher now
-pm2 start claw-applier          # run applier now
-pm2 stop claw-applier           # stop applier mid-run
-```
+The lockfile mechanism ensures only one instance runs at a time — if a searcher is already running, the cron invocation exits immediately.
 
 ### 7. Run manually
 

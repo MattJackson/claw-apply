@@ -6,8 +6,7 @@ loadEnv(); // load .env before anything else
  * Reads jobs queue and applies using the appropriate handler per apply_type
  * Run via cron or manually: node job_applier.mjs [--preview]
  */
-import { existsSync } from 'fs';
-import { writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
