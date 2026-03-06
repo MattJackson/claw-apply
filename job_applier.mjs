@@ -239,7 +239,8 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
     case 'needs_answer': {
       const questionText = pending_question?.label || pending_question || 'Unknown question';
       const questionOptions = pending_question?.options || [];
-      console.log(`    💬 Unknown question — asking Claude: "${questionText}"${questionOptions.length ? ` (options: ${questionOptions.join(', ')})` : ''}`);
+      console.log(`    💬 Paused — unknown question: "${questionText}"${questionOptions.length ? ` (options: ${questionOptions.join(', ')})` : ''}`);
+      console.log(`    Generating AI answer and sending to Telegram...`);
 
       const aiAnswer = await generateAnswer(questionText, profile, apiKey, { title, company });
 
@@ -265,6 +266,7 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       });
       appendLog({ ...job, title, company, status: 'needs_answer', pending_question, ai_suggested_answer: aiAnswer });
       results.needs_answer++;
+      console.log(`    ⏸️  Question sent to Telegram. Job will retry after you reply.`);
       break;
     }
 
