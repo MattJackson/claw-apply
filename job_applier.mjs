@@ -327,7 +327,9 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
   }
 }
 
-main().catch(e => {
+main().then(() => {
+  logStream.end(() => process.exit(0));
+}).catch(e => {
   console.error('Fatal:', e.message);
-  process.exit(1);
+  logStream.end(() => process.exit(1));
 });

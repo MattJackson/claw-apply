@@ -299,7 +299,9 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().then(() => {
+  logStream.end(() => process.exit(0));
+}).catch(err => {
   console.error('Fatal:', err.message);
-  process.exit(1);
+  logStream.end(() => process.exit(1));
 });

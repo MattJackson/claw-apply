@@ -248,8 +248,10 @@ async function main() {
   return { added: totalAdded, seen: totalSeen };
 }
 
-main().catch(e => {
+main().then(() => {
+  logStream.end(() => process.exit(0));
+}).catch(e => {
   console.error('Fatal:', e.message);
   if (e.stack) console.error(e.stack);
-  process.exit(1);
+  logStream.end(() => process.exit(1));
 });
