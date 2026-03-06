@@ -32,7 +32,7 @@ process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return orig
 
 import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter } from './lib/queue.mjs';
 import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
-import { sendTelegram } from './lib/notify.mjs';
+import { sendTelegram, formatFilterSummary } from './lib/notify.mjs';
 import { DEFAULT_FILTER_MODEL, DEFAULT_FILTER_MIN_SCORE } from './lib/constants.mjs';
 
 const isStats = process.argv.includes('--stats');
@@ -187,12 +187,17 @@ async function collect(state, settings) {
   });
   writeFileSync(runsPath, JSON.stringify(runs, null, 2));
 
-  const summary = `✅ Filter complete — ${passed} passed, ${filtered} filtered, ${errors} errors (est. cost: $${totalCost.toFixed(2)})`;
-  console.log(`\n${summary}`);
+  // Collect top-scoring jobs for summary
+  const freshQueue = loadQueue();
+  const topJobs = freshQueue
+    .filter(j => resultMap[j.id] && j.filter_score >= (searchConfig.filter_min_score ?? DEFAULT_FILTER_MIN_SCORE))
+    .sort((a, b) => (b.filter_score || 0) - (a.filter_score || 0))
+    .slice(0, 5)
+    .map(j => ({ score: j.filter_score, title: j.title, company: j.company }));
 
-  await sendTelegram(settings,
-    `🔍 *AI Filter complete*\n✅ Passed: ${passed}\n🚫 Filtered: ${filtered}\n⚠️ Errors: ${errors}`
-  ).catch(() => {});
+  const summary = formatFilterSummary({ passed, filtered, errors, cost: totalCost, topJobs });
+  console.log(`\n${summary.replace(/\*/g, '')}`);
+  await sendTelegram(settings, summary).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------

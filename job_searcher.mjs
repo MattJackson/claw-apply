@@ -38,6 +38,7 @@ async function main() {
 
   let totalAdded = 0, totalSeen = 0;
   const platformsRun = [];
+  const trackCounts = {}; // { trackName: { found, added } }
   const startedAt = Date.now();
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
@@ -70,7 +71,7 @@ async function main() {
     console.log('  Writing partial results to last-run file...');
     writeLastRun(false);
     if (totalAdded > 0) {
-      const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun.length ? platformsRun : ['LinkedIn']);
+      const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun.length ? platformsRun : ['LinkedIn'], trackCounts);
       await sendTelegram(settings, summary + '\n_(partial run — interrupted)_').catch(() => {});
     }
   });
@@ -178,6 +179,8 @@ async function main() {
         });
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
         markComplete('linkedin', search.name, { found: queryFound, added: queryAdded });
+        const tc = trackCounts[search.name] || (trackCounts[search.name] = { found: 0, added: 0 });
+        tc.found += queryFound; tc.added += queryAdded;
       }
 
       platformsRun.push('LinkedIn');
@@ -220,6 +223,8 @@ async function main() {
         });
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
         markComplete('wellfound', search.name, { found: queryFound, added: queryAdded });
+        const tc = trackCounts[search.name] || (trackCounts[search.name] = { found: 0, added: 0 });
+        tc.found += queryFound; tc.added += queryAdded;
       }
 
       platformsRun.push('Wellfound');
@@ -232,7 +237,7 @@ async function main() {
   }
 
   // Summary
-  const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun);
+  const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun, trackCounts);
   console.log(`\n${summary.replace(/\*/g, '')}`);
   if (totalAdded > 0) await sendTelegram(settings, summary).catch(() => {});
 
