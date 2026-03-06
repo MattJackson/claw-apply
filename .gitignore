@@ -3,6 +3,9 @@ node_modules/
 # Runtime data — never commit
 data/jobs_queue.json
 data/applications_log.json
+data/search_progress.json
+data/searcher_last_run.json
+data/applier_last_run.json
 
 # User config — contains credentials, never commit
 config/settings.json
