@@ -266,9 +266,7 @@ async function submit(settings, searchConfig, candidateProfile) {
   console.log(`  ${batchSummary}`);
   console.log(`  Results typically ready in < 1 hour. Next run will collect.`);
 
-  await sendTelegram(settings,
-    `🔍 *AI Filter submitted*\n${filterable.length} jobs across ${submitted.length} tracks\n${batchSummary}`
-  ).catch(() => {});
+  // No Telegram on submit — only notify on collect when results are ready
 }
 
 // ---------------------------------------------------------------------------
@@ -296,10 +294,12 @@ async function main() {
   const state = readState();
 
   if (state?.batches?.length > 0) {
-    // Phase 1: collect results from all pending batches
+    // Phase 1: collect results from pending batches
     await collect(state, settings);
-  } else {
-    // Phase 2: submit new batches (one per track)
+  }
+
+  // Phase 2: submit any remaining unscored jobs (runs after collect too)
+  if (!readState()) {
     await submit(settings, searchConfig, candidateProfile);
   }
 }
