@@ -4,14 +4,12 @@
  * Searches LinkedIn + Wellfound and populates the jobs queue
  * Run via cron or manually: node job_searcher.mjs
  */
-import { readFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const cfg = p => JSON.parse(readFileSync(resolve(__dir, p), 'utf8'));
 
-import { addJobs, loadQueue } from './lib/queue.mjs';
+import { addJobs, loadQueue, loadConfig } from './lib/queue.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
@@ -22,8 +20,8 @@ async function main() {
   console.log('🔍 claw-apply: Job Searcher starting\n');
 
   // Load config
-  const settings = cfg('config/settings.json');
-  const searchConfig = cfg('config/search_config.json');
+  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
 
   // First run detection: if queue is empty, use first_run_days lookback
   const isFirstRun = loadQueue().length === 0;

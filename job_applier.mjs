@@ -4,14 +4,13 @@
  * Reads jobs queue and applies to each new/needs_answer job
  * Run via cron or manually: node job_applier.mjs [--preview]
  */
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const cfg = p => JSON.parse(readFileSync(resolve(__dir, p), 'utf8'));
 
-import { getJobsByStatus, updateJobStatus, appendLog } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, appendLog, loadConfig } from './lib/queue.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
 import { verifyLogin as liLogin, applyLinkedIn } from './lib/linkedin.mjs';
@@ -20,7 +19,7 @@ import { sendTelegram, formatApplySummary, formatUnknownQuestion } from './lib/n
 import {
   DEFAULT_REVIEW_WINDOW_MINUTES,
   APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_WF_BASE,
-  APPLY_BETWEEN_DELAY_JITTER
+  APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES
 } from './lib/constants.mjs';
 
 const isPreview = process.argv.includes('--preview');
@@ -28,14 +27,14 @@ const isPreview = process.argv.includes('--preview');
 async function main() {
   console.log('🚀 claw-apply: Job Applier starting\n');
 
-  const settings = cfg('config/settings.json');
-  const profile = cfg('config/profile.json');
-  const answers = existsSync(resolve(__dir, 'config/answers.json'))
-    ? JSON.parse(readFileSync(resolve(__dir, 'config/answers.json'), 'utf8'))
-    : [];
+  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  const profile = loadConfig(resolve(__dir, 'config/profile.json'));
+  const answersPath = resolve(__dir, 'config/answers.json');
+  const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];
 
   const formFiller = new FormFiller(profile, answers);
   const maxApps = settings.max_applications_per_run || Infinity;
+  const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
 
   // Preview mode: show queue and exit
   if (isPreview) {
@@ -87,10 +86,7 @@ async function main() {
           const result = await applyLinkedIn(liBrowser.page, job, formFiller);
           await handleResult(job, result, results, settings);
         } catch (e) {
-          console.log(`    ❌ Error: ${e.message?.substring(0, 80)}`);
-          updateJobStatus(job.id, 'failed', { notes: e.message?.substring(0, 80) });
-          appendLog({ ...job, status: 'failed', error: e.message?.substring(0, 80) });
-          results.failed++;
+          handleError(job, e, results, maxRetries);
         }
         await liBrowser.page.waitForTimeout(APPLY_BETWEEN_DELAY_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER);
       }
@@ -117,10 +113,7 @@ async function main() {
           const result = await applyWellfound(wfBrowser.page, job, formFiller);
           await handleResult(job, result, results, settings);
         } catch (e) {
-          console.log(`    ❌ Error: ${e.message?.substring(0, 80)}`);
-          updateJobStatus(job.id, 'failed', { notes: e.message?.substring(0, 80) });
-          appendLog({ ...job, status: 'failed', error: e.message?.substring(0, 80) });
-          results.failed++;
+          handleError(job, e, results, maxRetries);
         }
         await wfBrowser.page.waitForTimeout(APPLY_BETWEEN_DELAY_WF_BASE + Math.random() * APPLY_BETWEEN_DELAY_JITTER);
       }
@@ -196,6 +189,20 @@ async function handleResult(job, result, results, settings) {
       updateJobStatus(job.id, 'failed', { notes: status, title, company });
       appendLog({ ...job, title, company, status: 'failed', notes: status });
       results.failed++;
+  }
+}
+
+function handleError(job, e, results, maxRetries) {
+  const msg = e.message?.substring(0, 80);
+  const retries = (job.retry_count || 0) + 1;
+  if (retries <= maxRetries) {
+    console.log(`    ⚠️  Error (retry ${retries}/${maxRetries}): ${msg}`);
+    updateJobStatus(job.id, 'new', { retry_count: retries, last_error: msg });
+  } else {
+    console.log(`    ❌ Error (max retries reached): ${msg}`);
+    updateJobStatus(job.id, 'failed', { retry_count: retries, notes: msg });
+    appendLog({ ...job, status: 'failed', error: msg });
+    results.failed++;
   }
 }
 
