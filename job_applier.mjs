@@ -304,6 +304,13 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       break;
     }
 
+    case 'closed':
+      console.log(`    🚫 Closed — no longer accepting applications`);
+      updateJobStatus(job.id, 'closed', { title, company });
+      appendLog({ ...job, title, company, status: 'closed' });
+      results.closed = (results.closed || 0) + 1;
+      break;
+
     case 'no_modal':
     case 'skipped_no_apply':
     case 'skipped_easy_apply_unsupported':
