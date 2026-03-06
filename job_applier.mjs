@@ -88,9 +88,13 @@ async function main() {
   const allJobs = getJobsByStatus(['new', 'needs_answer'])
     .filter(j => enabledTypes.includes(j.apply_type))
     .sort((a, b) => {
-      const ap = APPLY_PRIORITY.indexOf(a.apply_type ?? 'unknown_external');
-      const bp = APPLY_PRIORITY.indexOf(b.apply_type ?? 'unknown_external');
-      return (ap === -1 ? 99 : ap) - (bp === -1 ? 99 : bp);
+      // Primary: filter_score descending
+      const scoreDiff = (b.filter_score ?? 0) - (a.filter_score ?? 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      // Secondary: recency descending (posted_date or found_at)
+      const aDate = new Date(a.posted_date || a.found_at || 0).getTime();
+      const bDate = new Date(b.posted_date || b.found_at || 0).getTime();
+      return bDate - aDate;
     });
   const jobs = allJobs.slice(0, maxApps);
   console.log(`Enabled types: ${enabledTypes.join(', ')}\n`);
