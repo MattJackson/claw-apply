@@ -39,11 +39,11 @@ async function main() {
   const profile = loadConfig(resolve(__dir, 'config/profile.json'));
   const answersPath = resolve(__dir, 'config/answers.json');
   const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];
-  const formFiller = new FormFiller(profile, answers);
   const maxApps = settings.max_applications_per_run || Infinity;
   const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
   const enabledTypes = settings.enabled_apply_types || DEFAULT_ENABLED_APPLY_TYPES;
   const apiKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
+  const formFiller = new FormFiller(profile, answers, { apiKey, answersPath });
 
   const startedAt = Date.now();
   const results = {
@@ -140,6 +140,9 @@ async function main() {
           console.log(`  ⏱️  Run timeout (${Math.round(APPLY_RUN_TIMEOUT_MS / 60000)}min) — stopping`);
           break;
         }
+
+        // Set job context for AI answers
+        formFiller.jobContext = { title: job.title, company: job.company };
 
         // Reload answers.json before each job — picks up Telegram replies between jobs
         try {
