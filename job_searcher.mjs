@@ -18,6 +18,7 @@ import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
+import { initProgress, isCompleted, markComplete } from './lib/search_progress.mjs';
 
 async function main() {
   const lock = acquireLock('searcher', resolve(__dir, 'data'));
@@ -69,8 +70,11 @@ async function main() {
   }
 
   const isFirstRun = loadQueue().length === 0;
-  const lookbackDays = isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : null;
+  const lookbackDays = isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : (searchConfig.posted_within_days || 2);
   if (isFirstRun) console.log(`📅 First run — looking back ${lookbackDays} days\n`);
+
+  // Init progress tracking — enables resume on restart
+  initProgress(resolve(__dir, 'data'), lookbackDays);
 
   // Group searches by platform
   const liSearches = searchConfig.searches.filter(s => s.platforms?.includes('linkedin'));
@@ -87,9 +91,11 @@ async function main() {
       console.log('  ✅ Logged in');
 
       for (const search of liSearches) {
-        const effectiveSearch = lookbackDays
-          ? { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } }
-          : search;
+        if (isCompleted('linkedin', search.name)) {
+          console.log(`  [${search.name}] ✓ already done, skipping`);
+          continue;
+        }
+        const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
         await searchLinkedIn(liBrowser.page, effectiveSearch, {
           onPage: (pageJobs) => {
@@ -102,6 +108,7 @@ async function main() {
           }
         });
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
+        markComplete('linkedin', search.name, { found: queryFound, added: queryAdded });
       }
 
       platformsRun.push('LinkedIn');
@@ -123,9 +130,11 @@ async function main() {
       else console.log('  ✅ Logged in');
 
       for (const search of wfSearches) {
-        const effectiveSearch = lookbackDays
-          ? { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } }
-          : search;
+        if (isCompleted('wellfound', search.name)) {
+          console.log(`  [${search.name}] ✓ already done, skipping`);
+          continue;
+        }
+        const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
         await searchWellfound(wfBrowser.page, effectiveSearch, {
           onPage: (pageJobs) => {
@@ -138,6 +147,7 @@ async function main() {
           }
         });
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
+        markComplete('wellfound', search.name, { found: queryFound, added: queryAdded });
       }
 
       platformsRun.push('Wellfound');
