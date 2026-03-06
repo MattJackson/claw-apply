@@ -53,12 +53,12 @@ kernel proxies create --type residential --country US --name "claw-apply-proxy"
 kernel auth connections create --profile-name "LinkedIn-YourName" --domain linkedin.com
 kernel auth connections create --profile-name "WellFound-YourName" --domain wellfound.com
 
-# Complete initial login flows
+# Complete initial login flows (use: kernel auth connections list  to find IDs)
 kernel auth connections login <linkedin-connection-id>
 kernel auth connections login <wellfound-connection-id>
 ```
 
-Add the profile names, connection IDs, and proxy ID to `config/settings.json`.
+Add the profile names and proxy ID to `config/settings.json`. Connection IDs are not needed — the applier finds them automatically by domain.
 
 ### 3. Set up Telegram notifications
 

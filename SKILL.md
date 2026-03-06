@@ -37,15 +37,15 @@ kernel proxies create --type residential --country US --name "claw-apply-proxy"
 
 # Create managed auth connections (one per platform)
 kernel auth connections create --profile-name "LinkedIn-YourName" --domain linkedin.com
-# Note the connection ID from output
-
 kernel auth connections create --profile-name "WellFound-YourName" --domain wellfound.com
-# Note the connection ID from output
 
-# Trigger initial login flows (opens a browser URL to complete auth)
+# Complete initial login flows (opens a hosted URL to log in)
+# Use: kernel auth connections list   to find the connection IDs
 kernel auth connections login <linkedin-connection-id>
 kernel auth connections login <wellfound-connection-id>
 ```
+
+> **Note:** You only need connection IDs for the initial login. After that, the applier finds connections automatically by domain (`linkedin.com`, `wellfound.com`) — no IDs to store or keep in sync. Kernel's managed auth handles session refresh and re-authentication with stored credentials.
 
 ### 3. Configure
 
@@ -61,8 +61,6 @@ cp config/search_config.example.json config/search_config.json
 - `kernel.proxy_id` — proxy ID from step 2
 - `kernel.profiles.linkedin` — profile name e.g. `LinkedIn-YourName`
 - `kernel.profiles.wellfound` — profile name e.g. `WellFound-YourName`
-- `kernel.connection_ids.linkedin` — connection ID from step 2
-- `kernel.connection_ids.wellfound` — connection ID from step 2
 
 **`profile.json`** — your name, email, phone, resume path, work authorization, salary targets
 
