@@ -107,29 +107,46 @@ async function collect(state, settings) {
 
   let passed = 0, filtered = 0, errors = 0;
 
-  for (const { jobId, score, reason, error } of results) {
-    if (error || score === null) {
+  // Build a lookup map from results for O(1) access
+  const resultMap = {};
+  for (const r of results) resultMap[r.jobId] = r;
+
+  // Load queue once, apply all updates in memory, save once
+  const queue = loadQueue();
+  const now = new Date().toISOString();
+
+  for (const job of queue) {
+    const r = resultMap[job.id];
+    if (!r) continue;
+
+    if (r.error || r.score === null) {
       errors++;
-      // Pass through on error — never block applications due to filter failure
-      updateJobStatus(jobId, 'new', { filter_score: null, filter_reason: reason || 'filter_error' });
+      job.filter_score = null;
+      job.filter_reason = r.reason || 'filter_error';
+      job.status_updated_at = now;
       continue;
     }
 
-    // Find per-track threshold
-    const queue = loadQueue();
-    const job = queue.find(j => j.id === jobId);
-    const track = job?.track || 'ae';
+    const track = job.track || 'ae';
     const searchEntry = (searchConfig.searches || []).find(s => s.track === track);
     const minScore = searchEntry?.filter_min_score ?? globalMin;
 
-    if (score >= minScore) {
+    job.filter_score = r.score;
+    job.filter_reason = r.reason;
+    job.status_updated_at = now;
+
+    if (r.score >= minScore) {
       passed++;
-      updateJobStatus(jobId, 'new', { filter_score: score, filter_reason: reason });
+      // keep status as 'new'
     } else {
       filtered++;
-      updateJobStatus(jobId, 'filtered', { filter_score: score, filter_reason: reason });
+      job.status = 'filtered';
     }
   }
+
+  // Single write for all 4,652 updates
+  const { saveQueue } = await import('./lib/queue.mjs');
+  saveQueue(queue);
 
   clearState();
 
