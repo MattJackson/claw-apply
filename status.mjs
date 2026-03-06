@@ -219,45 +219,34 @@ function formatReport(s) {
   lines.push(`🚀 *Applier:* ${applierLine}`);
   if (lastApplierDetail) lines.push(lastApplierDetail);
 
-  lines.push(
-    ``,
-    `📋 *Queue — ${q.total} total jobs*`,
-    `  🆕 Ready to apply:      ${q.new}`,
-  );
+  // Queue summary — only show non-zero counts
+  lines.push('', `📋 *Queue* — ${q.total} total`);
 
+  const queueLines = [
+    [q.new, 'Ready to apply'],
+    [q.applied, 'Applied'],
+    [q.filtered || 0, 'AI filtered'],
+    [q.needs_answer, 'Needs answer'],
+    [q.skipped_other || 0, 'Incomplete/stuck'],
+    [q.skipped_no_apply, 'No apply button'],
+    [q.skipped_recruiter, 'Recruiter-only'],
+    [q.skipped_external, 'External ATS'],
+  ];
+  for (const [count, label] of queueLines) {
+    if (count > 0) lines.push(`  ${label}: ${count}`);
+  }
+
+  // Ready-to-apply breakdown by type
   if (s.apply_type_breakdown && Object.keys(s.apply_type_breakdown).length > 0) {
     const sorted = Object.entries(s.apply_type_breakdown).sort((a, b) => b[1] - a[1]);
-    for (const [type, count] of sorted) {
-      lines.push(`      • ${type}: ${count}`);
-    }
+    const parts = sorted.map(([type, count]) => `${type} ${count}`);
+    lines.push(`  Breakdown: ${parts.join(', ')}`);
   }
 
-  lines.push(
-    `  🚫 AI filtered:         ${q.filtered || 0}`,
-    `  ✅ Applied:             ${q.applied}`,
-    `  🔁 Already applied:     ${q.already_applied || 0}`,
-    `  💬 Needs your answer:   ${q.needs_answer}`,
-    `  ❌ Failed:              ${q.failed}`,
-    `  🚫 Recruiter-only:      ${q.skipped_recruiter}`,
-    `  ⏭️  No apply button:     ${q.skipped_no_apply}`,
-    `  ⚠️  Other skips:         ${q.skipped_other || 0}`,
-    `  🌐 External ATS:        ${q.skipped_external}`,
-  );
-
-  if (Object.keys(s.ats_breakdown).length > 0) {
-    const sorted = Object.entries(s.ats_breakdown).sort((a, b) => b[1] - a[1]);
-    lines.push(``, `🌐 *External ATS — ${q.skipped_external} jobs (saved for later):*`);
-    for (const [platform, count] of sorted) {
-      lines.push(`  • ${platform}: ${count}`);
-    }
-  }
-
+  // Last applied
   if (s.last_applied) {
     const la = s.last_applied;
-    const when = la.at ? timeAgo(la.at) : 'unknown';
-    lines.push(``, `📬 *Last applied:* ${la.title} @ ${la.company} — ${when}`);
-  } else {
-    lines.push(``, `📬 *Last applied:* None yet`);
+    lines.push('', `Last applied: ${la.title} @ ${la.company} — ${la.at ? timeAgo(la.at) : 'unknown'}`);
   }
 
   return lines.join('\n');
