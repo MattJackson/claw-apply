@@ -19,9 +19,16 @@ loadEnv();
 
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, createWriteStream } from 'fs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+
+// Tee all output to a log file so it's always available regardless of how the process is launched
+const logStream = createWriteStream(resolve(__dir, 'data/filter.log'), { flags: 'w' });
+const origStdoutWrite = process.stdout.write.bind(process.stdout);
+const origStderrWrite = process.stderr.write.bind(process.stderr);
+process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
+process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
 import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter } from './lib/queue.mjs';
 import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';

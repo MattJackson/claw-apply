@@ -9,8 +9,16 @@ loadEnv(); // load .env before anything else
 
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { createWriteStream } from 'fs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+
+// Tee all output to a log file so it's always available regardless of how the process is launched
+const logStream = createWriteStream(resolve(__dir, 'data/searcher.log'), { flags: 'w' });
+const origStdoutWrite = process.stdout.write.bind(process.stdout);
+const origStderrWrite = process.stderr.write.bind(process.stderr);
+process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
+process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
 import { addJobs, loadQueue, loadConfig } from './lib/queue.mjs';
 import { writeFileSync, readFileSync, existsSync } from 'fs';

@@ -36,9 +36,6 @@ const DEFAULT_ENABLED_APPLY_TYPES = ['easy_apply'];
 
 const isPreview = process.argv.includes('--preview');
 
-// Priority order — Easy Apply first, then by ATS volume (data-driven later)
-const APPLY_PRIORITY = ['easy_apply', 'wellfound', 'greenhouse', 'lever', 'ashby', 'workday', 'jobvite', 'unknown_external'];
-
 async function main() {
   const lock = acquireLock('applier', resolve(__dir, 'data'));
 
@@ -124,7 +121,9 @@ async function main() {
   }
 
   // Process each platform group
+  let timedOut = false;
   for (const [platform, platformJobs] of Object.entries(byPlatform)) {
+    if (timedOut) break;
     console.log(`\n--- ${platform.toUpperCase()} (${platformJobs.length} jobs) ---\n`);
     let browser;
     try {
@@ -149,6 +148,7 @@ async function main() {
         // Check overall run timeout
         if (Date.now() - startedAt > APPLY_RUN_TIMEOUT_MS) {
           console.log(`  ⏱️  Run timeout (${Math.round(APPLY_RUN_TIMEOUT_MS / 60000)}min) — stopping`);
+          timedOut = true;
           break;
         }
 
