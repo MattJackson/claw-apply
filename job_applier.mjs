@@ -32,7 +32,7 @@ import {
   APPLY_RUN_TIMEOUT_MS, PER_JOB_TIMEOUT_MS
 } from './lib/constants.mjs';
 
-const DEFAULT_ENABLED_APPLY_TYPES = ['easy_apply'];
+const DEFAULT_ENABLED_APPLY_TYPES = ['easy_apply', 'wellfound'];
 
 const isPreview = process.argv.includes('--preview');
 
@@ -120,9 +120,12 @@ async function main() {
     byPlatform[platform].push(job);
   }
 
-  // Process each platform group
+  // Process each platform group — LinkedIn first, then Wellfound, then external
+  const platformOrder = ['linkedin', 'wellfound', 'external'];
+  const sortedPlatforms = Object.entries(byPlatform)
+    .sort((a, b) => (platformOrder.indexOf(a[0]) ?? 99) - (platformOrder.indexOf(b[0]) ?? 99));
   let timedOut = false;
-  for (const [platform, platformJobs] of Object.entries(byPlatform)) {
+  for (const [platform, platformJobs] of sortedPlatforms) {
     if (timedOut) break;
     console.log(`\n--- ${platform.toUpperCase()} (${platformJobs.length} jobs) ---\n`);
     let browser;
