@@ -137,7 +137,7 @@ Patterns support regex:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `max_applications_per_run` | `50` | Cap applications per run to avoid rate limits |
+| `max_applications_per_run` | no limit | Cap applications per run (optional, set to avoid rate limits) |
 | `max_retries` | `2` | Times to retry a failed application before marking it permanently failed |
 | `browser.provider` | `"kernel"` | `"kernel"` for stealth browsers, `"local"` for local Playwright |
 
@@ -158,14 +158,26 @@ claw-apply/
 ├── job_searcher.mjs           Search agent
 ├── job_applier.mjs            Apply agent
 ├── setup.mjs                  Setup wizard
+├── status.mjs                 Queue status report
 ├── lib/
 │   ├── constants.mjs          Shared constants and defaults
 │   ├── browser.mjs            Kernel/Playwright browser factory
+│   ├── session.mjs            Kernel Managed Auth session refresh
 │   ├── form_filler.mjs        Generic form filling with pattern matching
-│   ├── linkedin.mjs           LinkedIn search + Easy Apply
-│   ├── wellfound.mjs          Wellfound search + apply
+│   ├── keywords.mjs           AI-generated search keywords via Claude
+│   ├── linkedin.mjs           LinkedIn search + job classification
+│   ├── wellfound.mjs          Wellfound search
 │   ├── queue.mjs              Job queue and config management
-│   └── notify.mjs             Telegram notifications with rate limiting
+│   ├── notify.mjs             Telegram notifications with rate limiting
+│   └── apply/
+│       ├── index.mjs          Apply handler registry
+│       ├── easy_apply.mjs     LinkedIn Easy Apply
+│       ├── wellfound.mjs      Wellfound apply
+│       ├── greenhouse.mjs     Greenhouse ATS (stub)
+│       ├── lever.mjs          Lever ATS (stub)
+│       ├── workday.mjs        Workday ATS (stub)
+│       ├── ashby.mjs          Ashby ATS (stub)
+│       └── jobvite.mjs        Jobvite ATS (stub)
 ├── config/
 │   ├── *.example.json         Templates (committed)
 │   ├── profile.json           Your info (gitignored)
@@ -200,7 +212,7 @@ claw-apply/
 - [x] Preview mode (`--preview`)
 - [x] Configurable application caps and retry limits
 - [ ] Indeed support
-- [ ] External ATS support (Greenhouse, Lever)
+- [ ] External ATS support (Greenhouse, Lever, Workday, Ashby, Jobvite — stubs ready)
 - [ ] Job scoring and ranking
 - [ ] Per-job cover letter generation via LLM
 
