@@ -328,13 +328,26 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       break;
 
     case 'skipped_honeypot':
-    case 'stuck':
-    case 'incomplete':
-      console.log(`    ⏭️  Skipped — ${status}`);
+      console.log(`    ⏭️  Skipped — honeypot`);
       updateJobStatus(job.id, status, { title, company });
       appendLog({ ...job, title, company, status });
       results.skipped_other++;
       break;
+
+    case 'stuck':
+    case 'incomplete': {
+      const retries = (job.retry_count || 0) + 1;
+      if (retries <= maxRetries) {
+        console.log(`    ⏭️  ${status} — will retry (attempt ${retries}/${maxRetries})`);
+        updateJobStatus(job.id, 'new', { title, company, retry_count: retries });
+      } else {
+        console.log(`    ⏭️  ${status} — max retries reached`);
+        updateJobStatus(job.id, status, { title, company });
+        appendLog({ ...job, title, company, status });
+      }
+      results.skipped_other++;
+      break;
+    }
 
     default:
       console.warn(`    ⚠️  Unhandled status: ${status}`);
