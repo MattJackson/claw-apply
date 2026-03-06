@@ -119,7 +119,7 @@ async function main() {
         }
         const keywordStart = getKeywordStart('linkedin', search.name);
         if (keywordStart > 0) console.log(`  [${search.name}] resuming from keyword ${keywordStart + 1}/${search.keywords.length}`);
-        const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), filters: { ...search.filters, posted_within_days: lookbackDays } };
+        const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), keywordOffset: keywordStart, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
         await searchLinkedIn(liBrowser.page, effectiveSearch, {
           onPage: (pageJobs) => {
