@@ -18,6 +18,7 @@ import { createBrowser } from './lib/browser.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
 import { applyToJob, supportedTypes } from './lib/apply/index.mjs';
 import { sendTelegram, formatApplySummary } from './lib/notify.mjs';
+import { processTelegramReplies } from './lib/telegram_answers.mjs';
 import { generateAnswer } from './lib/ai_answer.mjs';
 import {
   APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES,
@@ -58,6 +59,11 @@ async function main() {
   });
 
   console.log('🚀 claw-apply: Job Applier starting\n');
+
+  // Process any Telegram replies before fetching jobs — saves answers and flips jobs back to "new"
+  const answered = await processTelegramReplies(settings, answersPath);
+  if (answered > 0) console.log(`📬 Processed ${answered} Telegram answer(s)\n`);
+
   console.log(`Supported apply types: ${supportedTypes().join(', ')}\n`);
 
   // Preview mode
@@ -237,12 +243,6 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
       const aiAnswer = await generateAnswer(questionText, profile, apiKey, { title, company });
 
-      updateJobStatus(job.id, 'needs_answer', {
-        title, company, pending_question,
-        ai_suggested_answer: aiAnswer || null,
-      });
-      appendLog({ ...job, title, company, status: 'needs_answer', pending_question, ai_suggested_answer: aiAnswer });
-
       const msg = [
         `❓ *New question* — ${company} / ${title}`,
         ``,
@@ -256,7 +256,14 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
         `Reply with your answer to store it, or reply *ACCEPT* to use the AI answer.`,
       ].filter(Boolean).join('\n');
 
-      await sendTelegram(settings, msg);
+      const telegramMsgId = await sendTelegram(settings, msg);
+
+      updateJobStatus(job.id, 'needs_answer', {
+        title, company, pending_question,
+        ai_suggested_answer: aiAnswer || null,
+        telegram_message_id: telegramMsgId,
+      });
+      appendLog({ ...job, title, company, status: 'needs_answer', pending_question, ai_suggested_answer: aiAnswer });
       results.needs_answer++;
       break;
     }
