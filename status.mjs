@@ -108,7 +108,9 @@ function formatReport(s) {
   const sr = s.searcher;
   const searcherLine = sr.running
     ? `🔄 Running now — ${q.total} jobs found so far`
-    : `⏸️  Last ran ${timeAgo(sr.last_run?.finished_at)}`;
+    : sr.last_run?.finished === false
+      ? `⚠️  Last run interrupted ${timeAgo(sr.last_run?.started_at)} (partial results saved)`
+      : `⏸️  Last ran ${timeAgo(sr.last_run?.finished_at)}`;
   const lastRunDetail = sr.last_run && !sr.running
     ? `  Found ${sr.last_run.added} new jobs (${sr.last_run.seen} seen, ${sr.last_run.skipped_dupes || 0} dupes)`
     : null;

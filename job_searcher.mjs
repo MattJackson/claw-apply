@@ -20,8 +20,29 @@ import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
 
 async function main() {
-  acquireLock('searcher', resolve(__dir, 'data'));
+  const lock = acquireLock('searcher', resolve(__dir, 'data'));
   console.log('🔍 claw-apply: Job Searcher starting\n');
+
+  let totalAdded = 0, totalSeen = 0;
+  const platformsRun = [];
+  const startedAt = Date.now();
+
+  const writeLastRun = (finished = false) => {
+    writeFileSync(resolve(__dir, 'data/searcher_last_run.json'), JSON.stringify({
+      started_at: startedAt,
+      finished_at: finished ? Date.now() : null,
+      finished,
+      added: totalAdded,
+      seen: totalSeen,
+      skipped_dupes: totalSeen - totalAdded,
+      platforms: platformsRun,
+    }, null, 2));
+  };
+
+  lock.onShutdown(() => {
+    console.log('  Writing partial results to last-run file...');
+    writeLastRun(false);
+  });
 
   // Load config
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
@@ -50,10 +71,6 @@ async function main() {
   const isFirstRun = loadQueue().length === 0;
   const lookbackDays = isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : null;
   if (isFirstRun) console.log(`📅 First run — looking back ${lookbackDays} days\n`);
-
-  let totalAdded = 0;
-  let totalSeen = 0;
-  const platformsRun = [];
 
   // Group searches by platform
   const liSearches = searchConfig.searches.filter(s => s.platforms?.includes('linkedin'));
@@ -136,14 +153,7 @@ async function main() {
   console.log(`\n${summary.replace(/\*/g, '')}`);
   if (totalAdded > 0) await sendTelegram(settings, summary);
 
-  // Write last-run metadata for status.mjs
-  writeFileSync(resolve(__dir, 'data/searcher_last_run.json'), JSON.stringify({
-    finished_at: Date.now(),
-    added: totalAdded,
-    seen: totalSeen,
-    skipped_dupes: totalSeen - totalAdded,
-    platforms: platformsRun,
-  }, null, 2));
+  writeLastRun(true);
 
   console.log('\n✅ Search complete');
   return { added: totalAdded, seen: totalSeen };

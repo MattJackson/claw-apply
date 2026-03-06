@@ -27,7 +27,12 @@ import {
 const isPreview = process.argv.includes('--preview');
 
 async function main() {
-  acquireLock('applier', resolve(__dir, 'data'));
+  const lock = acquireLock('applier', resolve(__dir, 'data'));
+  lock.onShutdown(() => {
+    writeFileSync(resolve(__dir, 'data/applier_last_run.json'), JSON.stringify({
+      finished_at: null, finished: false, note: 'interrupted'
+    }, null, 2));
+  });
   console.log('🚀 claw-apply: Job Applier starting\n');
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
