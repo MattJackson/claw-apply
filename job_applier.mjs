@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 import { getJobsByStatus, updateJobStatus, appendLog, loadConfig } from './lib/queue.mjs';
+import { writeFileSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
@@ -132,6 +133,12 @@ async function main() {
   const summary = formatApplySummary(results);
   console.log(`\n${summary.replace(/\*/g, '')}`);
   await sendTelegram(settings, summary);
+
+  // Write last-run metadata for status.mjs
+  writeFileSync(resolve(__dir, 'data/applier_last_run.json'), JSON.stringify({
+    finished_at: Date.now(),
+    ...results,
+  }, null, 2));
 
   console.log('\n✅ Apply run complete');
   return results;

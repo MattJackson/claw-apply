@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 import { addJobs, loadQueue, loadConfig } from './lib/queue.mjs';
+import { writeFileSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
@@ -134,6 +135,15 @@ async function main() {
   const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun);
   console.log(`\n${summary.replace(/\*/g, '')}`);
   if (totalAdded > 0) await sendTelegram(settings, summary);
+
+  // Write last-run metadata for status.mjs
+  writeFileSync(resolve(__dir, 'data/searcher_last_run.json'), JSON.stringify({
+    finished_at: Date.now(),
+    added: totalAdded,
+    seen: totalSeen,
+    skipped_dupes: totalSeen - totalAdded,
+    platforms: platformsRun,
+  }, null, 2));
 
   console.log('\n✅ Search complete');
   return { added: totalAdded, seen: totalSeen };

@@ -22,6 +22,11 @@ function isRunning(name) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
+function readLastRun(name) {
+  const path = resolve(__dir, `data/${name}_last_run.json`);
+  return readJson(path);
+}
+
 function buildStatus() {
   const queue = readJson(resolve(__dir, 'data/jobs_queue.json')) || [];
   const log   = readJson(resolve(__dir, 'data/applications_log.json')) || [];
@@ -51,12 +56,17 @@ function buildStatus() {
     .sort((a, b) => (b.applied_at || 0) - (a.applied_at || 0));
   const lastApplied = applied[0] || null;
 
+  const searcherLastRun = readLastRun('searcher');
+  const applierLastRun  = readLastRun('applier');
+
   return {
     searcher: {
       running: isRunning('searcher'),
+      last_run: searcherLastRun,
     },
     applier: {
       running: isRunning('applier'),
+      last_run: applierLastRun,
     },
     queue: {
       total: queue.length,
@@ -80,30 +90,63 @@ function buildStatus() {
   };
 }
 
+function timeAgo(ms) {
+  if (!ms) return 'never';
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 function formatReport(s) {
   const q = s.queue;
-  const searcherStatus = s.searcher.running ? '🔄 Running now' : '⏸️  Idle';
-  const applierStatus  = s.applier.running  ? '🔄 Running now' : '⏸️  Idle';
+
+  // Searcher section
+  const sr = s.searcher;
+  const searcherLine = sr.running
+    ? `🔄 Running now — ${q.total} jobs found so far`
+    : `⏸️  Last ran ${timeAgo(sr.last_run?.finished_at)}`;
+  const lastRunDetail = sr.last_run && !sr.running
+    ? `  Found ${sr.last_run.added} new jobs (${sr.last_run.seen} seen, ${sr.last_run.skipped_dupes || 0} dupes)`
+    : null;
+
+  // Applier section
+  const ar = s.applier;
+  const applierLine = ar.running
+    ? `🔄 Running now`
+    : `⏸️  Last ran ${timeAgo(ar.last_run?.finished_at)}`;
+  const lastApplierDetail = ar.last_run && !ar.running
+    ? `  Applied ${ar.last_run.submitted} jobs that run`
+    : null;
 
   const lines = [
     `📊 *claw-apply Status*`,
     ``,
-    `🔍 *Searcher:* ${searcherStatus}`,
-    `🚀 *Applier:* ${applierStatus}`,
+    `🔍 *Searcher:* ${searcherLine}`,
+  ];
+  if (lastRunDetail) lines.push(lastRunDetail);
+
+  lines.push(`🚀 *Applier:* ${applierLine}`);
+  if (lastApplierDetail) lines.push(lastApplierDetail);
+
+  lines.push(
     ``,
     `📋 *Queue — ${q.total} total jobs*`,
-    `  🆕 New (pending):       ${q.new}`,
+    `  🆕 Ready to apply:      ${q.new}`,
     `  ✅ Applied:             ${q.applied}`,
     `  💬 Needs your answer:   ${q.needs_answer}`,
     `  ❌ Failed:              ${q.failed}`,
     `  🚫 Recruiter-only:      ${q.skipped_recruiter}`,
     `  ⏭️  No Easy Apply:       ${q.skipped_no_easy_apply}`,
     `  🌐 External ATS:        ${q.skipped_external}`,
-  ];
+  );
 
   if (Object.keys(s.ats_breakdown).length > 0) {
     const sorted = Object.entries(s.ats_breakdown).sort((a, b) => b[1] - a[1]);
-    lines.push(``, `🌐 *ATS Breakdown:*`);
+    lines.push(``, `🌐 *External ATS — ${q.skipped_external} jobs (saved for later):*`);
     for (const [platform, count] of sorted) {
       lines.push(`  • ${platform}: ${count}`);
     }
@@ -111,8 +154,8 @@ function formatReport(s) {
 
   if (s.last_applied) {
     const la = s.last_applied;
-    const when = la.at ? new Date(la.at).toLocaleString() : 'unknown time';
-    lines.push(``, `📬 *Last applied:* ${la.title} @ ${la.company} (${la.platform}) — ${when}`);
+    const when = la.at ? timeAgo(la.at) : 'unknown';
+    lines.push(``, `📬 *Last applied:* ${la.title} @ ${la.company} — ${when}`);
   } else {
     lines.push(``, `📬 *Last applied:* None yet`);
   }
