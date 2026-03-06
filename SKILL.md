@@ -1,8 +1,3 @@
----
-name: claw-apply
-description: Automated job search and application for LinkedIn and Wellfound. Searches for matching roles every 12 hours, AI-filters and scores them, applies automatically using Playwright + Kernel stealth browsers. Handles LinkedIn Easy Apply multi-step modals and Wellfound applications. Self-learning — asks you via Telegram when it hits an unknown question, suggests an AI answer, saves your reply, and never asks again. Recovers from browser crashes and retries failed applications automatically.
----
-
 # claw-apply
 
 Automated job search and application. Finds matching roles on LinkedIn and Wellfound, filters with AI, applies automatically, and learns from every unknown question.
@@ -102,7 +97,6 @@ Scheduling is managed via OpenClaw cron jobs (not system crontab):
 | Filter | `30 * * * *` America/Los_Angeles | AI filter every hour at :30 |
 | Applier | `*/5 * * * *` America/Los_Angeles | 1 job per run, silent (no Telegram noise) |
 | Telegram Poller | `* * * * *` America/Los_Angeles | Process answer replies every minute |
-| Git Pull | `*/5 * * * *` America/Los_Angeles | Auto-pull latest code, silent |
 
 **Notification defaults:** all crons use `delivery: none`. The scripts send their own Telegram summaries directly — no need for OpenClaw cron announcements on top.
 
