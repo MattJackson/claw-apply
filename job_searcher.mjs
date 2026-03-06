@@ -19,6 +19,7 @@ import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
 import { initProgress, isCompleted, markComplete } from './lib/search_progress.mjs';
+import { ensureLoggedIn } from './lib/session.mjs';
 
 async function main() {
   const lock = acquireLock('searcher', resolve(__dir, 'data'));
@@ -96,7 +97,7 @@ async function main() {
     let liBrowser;
     try {
       liBrowser = await createBrowser(settings, 'linkedin');
-      const loggedIn = await liLogin(liBrowser.page);
+      const loggedIn = await ensureLoggedIn(liBrowser.page, liLogin, 'linkedin', settings.kernel_api_key || process.env.KERNEL_API_KEY);
       if (!loggedIn) throw new Error('LinkedIn not logged in');
       console.log('  ✅ Logged in');
 
@@ -135,7 +136,7 @@ async function main() {
     let wfBrowser;
     try {
       wfBrowser = await createBrowser(settings, 'wellfound');
-      const loggedIn = await wfLogin(wfBrowser.page);
+      const loggedIn = await ensureLoggedIn(wfBrowser.page, wfLogin, 'wellfound', settings.kernel_api_key || process.env.KERNEL_API_KEY);
       if (!loggedIn) console.warn('  ⚠️ Wellfound login unconfirmed, proceeding');
       else console.log('  ✅ Logged in');
 
