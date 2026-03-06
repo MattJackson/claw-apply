@@ -109,19 +109,23 @@ pm2 save
 pm2 startup             # follow the printed command (requires sudo)
 ```
 
-**PM2 cheatsheet:**
-```bash
-pm2 list                        # show all jobs + status
-pm2 logs claw-searcher          # tail searcher logs
-pm2 logs claw-applier           # tail applier logs
-pm2 start claw-applier          # enable applier
-pm2 stop claw-applier           # pause applier
-pm2 restart claw-searcher       # restart searcher now
+PM2 manages the processes but **does not schedule them** — scheduling is handled by system cron. This ensures a running searcher is never killed mid-run. If it's already running, the cron invocation hits the lockfile and exits immediately.
+
+Add to crontab (`crontab -e`):
+```
+0 * * * * cd /path/to/claw-apply && node job_searcher.mjs >> /tmp/claw-searcher.log 2>&1
+0 */6 * * * cd /path/to/claw-apply && node job_applier.mjs >> /tmp/claw-applier.log 2>&1
 ```
 
-Schedules (set in `ecosystem.config.cjs`):
-- **Searcher**: `0 * * * *` (hourly)
-- **Applier**: `0 */6 * * *` (every 6h) — stopped by default, start when ready
+**PM2 cheatsheet:**
+```bash
+pm2 list                        # show all processes + status
+pm2 logs claw-searcher          # tail searcher logs
+pm2 logs claw-applier           # tail applier logs
+pm2 start claw-searcher         # run searcher now
+pm2 start claw-applier          # run applier now
+pm2 stop claw-applier           # stop applier mid-run
+```
 
 ### 7. Run manually
 

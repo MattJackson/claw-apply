@@ -7,10 +7,12 @@
 module.exports = {
   apps: [
     {
+      // Searcher is triggered by system cron, not PM2 cron_restart.
+      // PM2 just manages the process — system cron runs: node job_searcher.mjs
+      // Lockfile prevents parallel runs: if already running, new invocation exits immediately.
       name: 'claw-searcher',
       script: 'job_searcher.mjs',
-      cron_restart: '0 * * * *',   // hourly
-      autorestart: false,           // don't restart on exit — it's a one-shot job
+      autorestart: false,  // one-shot — do not restart on exit
       watch: false,
       interpreter: 'node',
       log_file: '/tmp/claw-searcher.log',
@@ -19,7 +21,6 @@ module.exports = {
     {
       name: 'claw-applier',
       script: 'job_applier.mjs',
-      cron_restart: '0 */6 * * *', // every 6 hours
       autorestart: false,
       watch: false,
       interpreter: 'node',
