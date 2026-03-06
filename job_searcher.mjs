@@ -34,6 +34,24 @@ import { ensureLoggedIn } from './lib/session.mjs';
 
 async function main() {
   const lock = acquireLock('searcher', resolve(__dir, 'data'));
+
+  // Cooldown guard — never run more than once per 6 hours unless --force is passed
+  const MIN_HOURS_BETWEEN_RUNS = 6;
+  if (!process.argv.includes('--force')) {
+    const lastRunPath = resolve(__dir, 'data/searcher_last_run.json');
+    if (existsSync(lastRunPath)) {
+      const lastRun = JSON.parse(readFileSync(lastRunPath, 'utf8'));
+      const lastRanAt = lastRun.finished_at || lastRun.started_at;
+      if (lastRanAt) {
+        const hoursSince = (Date.now() - new Date(lastRanAt).getTime()) / (1000 * 60 * 60);
+        if (hoursSince < MIN_HOURS_BETWEEN_RUNS) {
+          console.log(`⏳ Searcher ran ${hoursSince.toFixed(1)}h ago — cooldown (${MIN_HOURS_BETWEEN_RUNS}h min). Use --force to override.`);
+          process.exit(0);
+        }
+      }
+    }
+  }
+
   console.log('🔍 claw-apply: Job Searcher starting\n');
 
   let totalAdded = 0, totalSeen = 0;
