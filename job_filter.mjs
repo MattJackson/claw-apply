@@ -119,6 +119,9 @@ async function collect(state, settings) {
     const r = resultMap[job.id];
     if (!r) continue;
 
+    // Skip jobs already scored (idempotent — safe to re-run collect)
+    if (job.filter_score != null) continue;
+
     if (r.error || r.score === null) {
       errors++;
       job.filter_score = null;
@@ -180,8 +183,8 @@ async function collect(state, settings) {
 async function submit(settings, searchConfig, candidateProfile) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  // Get all new jobs that haven't been scored and aren't already in a pending batch
-  const jobs = getJobsByStatus('new').filter(j => j.filter_score == null && !j.filter_batch_id);
+  // Get all new jobs that haven't been scored yet (no score AND not already in a pending batch)
+  const jobs = getJobsByStatus('new').filter(j => j.filter_score == null && !j.filter_batch_id && !j.filter_submitted_at);
 
   if (jobs.length === 0) {
     console.log('✅ Nothing to filter — all new jobs already scored.');
@@ -217,7 +220,10 @@ async function submit(settings, searchConfig, candidateProfile) {
   const allJobs = loadQueue();
   const filteredIds = new Set(filterable.map(j => j.id));
   for (const job of allJobs) {
-    if (filteredIds.has(job.id)) job.filter_batch_id = batchId;
+    if (filteredIds.has(job.id)) {
+      job.filter_batch_id = batchId;
+      job.filter_submitted_at = submittedAt;
+    }
   }
   saveQueue(allJobs);
 
