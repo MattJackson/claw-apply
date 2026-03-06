@@ -19,8 +19,6 @@ import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
 import { initProgress, isCompleted, markComplete } from './lib/search_progress.mjs';
-import { classifyBatch } from './lib/classifier.mjs';
-import { getJobsByStatus, updateJobStatus } from './lib/queue.mjs';
 
 async function main() {
   const lock = acquireLock('searcher', resolve(__dir, 'data'));
@@ -168,37 +166,6 @@ async function main() {
     } finally {
       await wfBrowser?.browser?.close().catch(() => {});
     }
-  }
-
-  // --- Phase 2: Classify new jobs ---
-  const unclassified = getJobsByStatus('new').filter(j => !j.apply_type);
-  if (unclassified.length > 0) {
-    console.log(`\n🔎 Phase 2: Classifying ${unclassified.length} jobs...`);
-    let liBrowser2;
-    try {
-      liBrowser2 = await createBrowser(settings, 'linkedin');
-      await liLogin(liBrowser2.page);
-      let done = 0;
-      const liJobs = unclassified.filter(j => j.platform === 'linkedin');
-      await classifyBatch(liBrowser2.page, liJobs, {
-        onClassified: (job) => {
-          updateJobStatus(job.id, 'new', { apply_type: job.apply_type, apply_url: job.apply_url, classified_at: job.classified_at });
-          done++;
-          process.stdout.write(`\r  Classified ${done}/${liJobs.length} — last: ${job.apply_type} (${job.title?.substring(0, 30)})`);
-        }
-      });
-      console.log(`\r  ✅ ${liJobs.length} LinkedIn jobs classified`);
-    } catch (e) {
-      console.error(`  ❌ Classification error: ${e.message}`);
-    } finally {
-      await liBrowser2?.browser?.close().catch(() => {});
-    }
-    // Wellfound jobs default to easy_apply (Wellfound uses its own apply flow)
-    const wfJobs = unclassified.filter(j => j.platform === 'wellfound');
-    for (const job of wfJobs) {
-      updateJobStatus(job.id, 'new', { apply_type: 'wellfound_apply', classified_at: Date.now() });
-    }
-    if (wfJobs.length > 0) console.log(`  ✅ ${wfJobs.length} Wellfound jobs marked for apply`);
   }
 
   // Summary
