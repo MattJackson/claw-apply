@@ -53,7 +53,8 @@ async function main() {
   const results = {
     submitted: 0, failed: 0, needs_answer: 0, total: 0,
     skipped_recruiter: 0, skipped_external: 0, skipped_no_apply: 0, skipped_other: 0,
-    already_applied: 0, atsCounts: {}
+    already_applied: 0, closed: 0, atsCounts: {},
+    jobDetails: [], // { title, company, url, status } per job for summary
   };
 
   lock.onShutdown(() => {
@@ -244,6 +245,9 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
   const { status, meta, pending_question, externalUrl, ats_platform } = result;
   const title = meta?.title || job.title || '?';
   const company = meta?.company || job.company || '?';
+
+  // Track per-job detail for summary
+  results.jobDetails.push({ title, company, url: job.url, status });
 
   switch (status) {
     case 'submitted':
