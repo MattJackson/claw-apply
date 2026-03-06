@@ -104,12 +104,7 @@ Scheduling is managed via OpenClaw cron jobs (not system crontab):
 | Telegram Poller | `* * * * *` America/Los_Angeles | Process answer replies every minute |
 | Git Pull | `*/5 * * * *` America/Los_Angeles | Auto-pull latest code, silent |
 
-**Notification defaults:**
-- Searcher: announce (you want to know when new jobs are found)
-- Filter: announce (you want to know batch results)
-- Applier: **none** — runs every 5 minutes, silent. You'll only hear from it when it has a question for you.
-- Telegram Poller: none
-- Git Pull: none
+**Notification defaults:** all crons use `delivery: none`. The scripts send their own Telegram summaries directly — no need for OpenClaw cron announcements on top.
 
 The lockfile mechanism ensures only one instance of each agent runs at a time.
 
