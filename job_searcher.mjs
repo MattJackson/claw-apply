@@ -52,7 +52,7 @@ async function main() {
     }
   }
 
-  console.log('🔍 claw-apply: Job Searcher starting\n');
+  console.log(`🔍 claw-apply: Job Searcher starting at ${new Date().toISOString()}\n`);
 
   let totalAdded = 0, totalSeen = 0;
   const platformsRun = [];
@@ -267,7 +267,7 @@ async function main() {
   }
   clearProgress(); // run finished cleanly — next run starts fresh with new keywords
 
-  console.log('\n✅ Search complete');
+  console.log(`\n✅ Search complete at ${new Date().toISOString()}`);
   return { added: totalAdded, seen: totalSeen };
 }
 
