@@ -100,8 +100,16 @@ Scheduling is managed via OpenClaw cron jobs (not system crontab):
 |-----|----------|-------------|
 | Searcher | `0 */12 * * *` America/Los_Angeles | Search every 12 hours |
 | Filter | `30 * * * *` America/Los_Angeles | AI filter every hour at :30 |
-| Applier | disabled by default | Enable when ready to auto-apply |
+| Applier | `*/5 * * * *` America/Los_Angeles | 1 job per run, silent (no Telegram noise) |
 | Telegram Poller | `* * * * *` America/Los_Angeles | Process answer replies every minute |
+| Git Pull | `*/5 * * * *` America/Los_Angeles | Auto-pull latest code, silent |
+
+**Notification defaults:**
+- Searcher: announce (you want to know when new jobs are found)
+- Filter: announce (you want to know batch results)
+- Applier: **none** — runs every 5 minutes, silent. You'll only hear from it when it has a question for you.
+- Telegram Poller: none
+- Git Pull: none
 
 The lockfile mechanism ensures only one instance of each agent runs at a time.
 
