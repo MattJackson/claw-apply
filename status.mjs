@@ -36,9 +36,13 @@ function buildStatus() {
   const byPlatform = {};
   const atsCounts = {};
 
+  const byApplyType = {};
   for (const job of queue) {
     byStatus[job.status] = (byStatus[job.status] || 0) + 1;
     byPlatform[job.platform] = (byPlatform[job.platform] || 0) + 1;
+    if (job.status === 'new' && job.apply_type) {
+      byApplyType[job.apply_type] = (byApplyType[job.apply_type] || 0) + 1;
+    }
     if (job.status === 'skipped_external_unsupported' && job.ats_platform) {
       atsCounts[job.ats_platform] = (atsCounts[job.ats_platform] || 0) + 1;
     }
@@ -80,6 +84,7 @@ function buildStatus() {
       by_platform: byPlatform,
     },
     ats_breakdown: atsCounts,
+    apply_type_breakdown: byApplyType,
     last_applied: lastApplied ? {
       title: lastApplied.title,
       company: lastApplied.company,
@@ -138,7 +143,18 @@ function formatReport(s) {
     ``,
     `📋 *Queue — ${q.total} total jobs*`,
     `  🆕 Ready to apply:      ${q.new}`,
+  );
+
+  if (s.apply_type_breakdown && Object.keys(s.apply_type_breakdown).length > 0) {
+    const sorted = Object.entries(s.apply_type_breakdown).sort((a, b) => b[1] - a[1]);
+    for (const [type, count] of sorted) {
+      lines.push(`      • ${type}: ${count}`);
+    }
+  }
+
+  lines.push(
     `  ✅ Applied:             ${q.applied}`,
+    `  🔁 Already applied:     ${byStatus['already_applied'] || 0}`,
     `  💬 Needs your answer:   ${q.needs_answer}`,
     `  ❌ Failed:              ${q.failed}`,
     `  🚫 Recruiter-only:      ${q.skipped_recruiter}`,

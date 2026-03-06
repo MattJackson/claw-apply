@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
-import { getJobsByStatus, updateJobStatus, appendLog, loadConfig } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied } from './lib/queue.mjs';
 import { writeFileSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
@@ -59,10 +59,21 @@ async function main() {
     return;
   }
 
-  // Get jobs to process: new + needs_answer (retries)
-  const allJobs = getJobsByStatus(['new', 'needs_answer']);
+  // Priority order for apply types
+  const APPLY_PRIORITY = ['easy_apply', 'wellfound_apply', 'greenhouse', 'lever', 'ashby', 'workday', 'unknown_external'];
+
+  // Get jobs to process: new + needs_answer, sorted by apply_type priority
+  const allJobs = getJobsByStatus(['new', 'needs_answer'])
+    .sort((a, b) => {
+      const ap = APPLY_PRIORITY.indexOf(a.apply_type ?? 'unknown_external');
+      const bp = APPLY_PRIORITY.indexOf(b.apply_type ?? 'unknown_external');
+      return (ap === -1 ? 99 : ap) - (bp === -1 ? 99 : bp);
+    });
   const jobs = allJobs.slice(0, maxApps);
-  console.log(`📋 ${jobs.length} job(s) to process${allJobs.length > jobs.length ? ` (capped from ${allJobs.length})` : ''}\n`);
+  const typeSummary = Object.entries(
+    jobs.reduce((acc, j) => { acc[j.apply_type || 'unclassified'] = (acc[j.apply_type || 'unclassified'] || 0) + 1; return acc; }, {})
+  ).map(([k, v]) => `${v} ${k}`).join(', ');
+  console.log(`📋 ${jobs.length} job(s) to process — ${typeSummary}\n`);
 
   if (jobs.length === 0) {
     console.log('Nothing to apply to. Run job_searcher.mjs first.');
@@ -72,7 +83,7 @@ async function main() {
   const results = {
     submitted: 0, failed: 0, needs_answer: 0, total: jobs.length,
     skipped_recruiter: 0, skipped_external: 0, skipped_no_easy_apply: 0,
-    atsCounts: {}
+    already_applied: 0, atsCounts: {}
   };
 
   // Group by platform
@@ -90,7 +101,12 @@ async function main() {
       console.log('  ✅ Logged in\n');
 
       for (const job of liJobs) {
-        console.log(`  → ${job.title} @ ${job.company || '?'}`);
+        if (isAlreadyApplied(job.id)) {
+          console.log(`  ⏭️  Already applied — ${job.title} @ ${job.company || '?'}`);
+          updateJobStatus(job.id, 'already_applied', {});
+          continue;
+        }
+        console.log(`  → ${job.title} @ ${job.company || '?'} [${job.apply_type || 'unclassified'}]`);
         try {
           const result = await applyLinkedIn(liBrowser.page, job, formFiller);
           await handleResult(job, result, results, settings);
@@ -117,7 +133,12 @@ async function main() {
       console.log('  ✅ Started\n');
 
       for (const job of wfJobs) {
-        console.log(`  → ${job.title} @ ${job.company || '?'}`);
+        if (isAlreadyApplied(job.id)) {
+          console.log(`  ⏭️  Already applied — ${job.title} @ ${job.company || '?'}`);
+          updateJobStatus(job.id, 'already_applied', {});
+          continue;
+        }
+        console.log(`  → ${job.title} @ ${job.company || '?'} [${job.apply_type || 'unclassified'}]`);
         try {
           const result = await applyWellfound(wfBrowser.page, job, formFiller);
           await handleResult(job, result, results, settings);
