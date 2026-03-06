@@ -1,6 +1,6 @@
 ---
 name: claw-apply
-description: Automated job search and application for LinkedIn and Wellfound. Searches for matching roles hourly, applies automatically every 6 hours using Playwright + Kernel stealth browsers. Handles LinkedIn Easy Apply multi-step modals and Wellfound applications. Self-learning — asks you via Telegram when it hits an unknown question, saves your answer, and never asks again. Retries failed applications automatically. Preview mode lets you review the queue before applying.
+description: Automated job search and application for LinkedIn and Wellfound. Searches for matching roles every 12 hours, applies automatically every 6 hours using Playwright + Kernel stealth browsers. Handles LinkedIn Easy Apply multi-step modals and Wellfound applications. Self-learning — asks you via Telegram when it hits an unknown question, saves your answer, and never asks again. Retries failed applications automatically. Preview mode lets you review the queue before applying.
 ---
 
 # claw-apply
@@ -113,7 +113,7 @@ PM2 manages the processes but **does not schedule them** — scheduling is handl
 
 Add to crontab (`crontab -e`):
 ```
-0 * * * * cd /path/to/claw-apply && node job_searcher.mjs >> /tmp/claw-searcher.log 2>&1
+0 */12 * * * cd /path/to/claw-apply && node job_searcher.mjs >> /tmp/claw-searcher.log 2>&1
 0 */6 * * * cd /path/to/claw-apply && node job_applier.mjs >> /tmp/claw-applier.log 2>&1
 ```
 
