@@ -195,7 +195,8 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
     case 'needs_answer': {
       const questionText = pending_question?.label || pending_question || 'Unknown question';
-      console.log(`    💬 Unknown question — asking Claude: "${questionText}"`);
+      const questionOptions = pending_question?.options || [];
+      console.log(`    💬 Unknown question — asking Claude: "${questionText}"${questionOptions.length ? ` (options: ${questionOptions.join(', ')})` : ''}`);
 
       const aiAnswer = await generateAnswer(questionText, profile, apiKey, { title, company });
 
@@ -209,13 +210,14 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
         `❓ *New question* — ${company} / ${title}`,
         ``,
         `*Question:* ${questionText}`,
+        questionOptions.length ? `*Options:* ${questionOptions.join(' | ')}` : '',
         ``,
         aiAnswer
           ? `*AI answer:*\n${aiAnswer}`
           : `_AI could not generate an answer._`,
         ``,
         `Reply with your answer to store it, or reply *ACCEPT* to use the AI answer.`,
-      ].join('\n');
+      ].filter(Boolean).join('\n');
 
       await sendTelegram(settings, msg);
       results.needs_answer++;
