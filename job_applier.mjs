@@ -6,11 +6,18 @@ loadEnv(); // load .env before anything else
  * Reads jobs queue and applies using the appropriate handler per apply_type
  * Run via cron or manually: node job_applier.mjs [--preview]
  */
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, writeFileSync, createWriteStream } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+
+// Tee all output to a log file so it's always available regardless of how the process is launched
+const logStream = createWriteStream(resolve(__dir, 'data/applier.log'), { flags: 'w' });
+const origStdoutWrite = process.stdout.write.bind(process.stdout);
+const origStderrWrite = process.stderr.write.bind(process.stderr);
+process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
+process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
 import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied } from './lib/queue.mjs';
 import { acquireLock } from './lib/lock.mjs';
