@@ -1,20 +1,20 @@
 ---
 name: claw-apply
-description: Automated job search and application for LinkedIn and Wellfound. Searches for matching roles every 12 hours, applies automatically every 6 hours using Playwright + Kernel stealth browsers. Handles LinkedIn Easy Apply multi-step modals and Wellfound applications. Self-learning — asks you via Telegram when it hits an unknown question, saves your answer, and never asks again. Retries failed applications automatically. Preview mode lets you review the queue before applying.
+description: Automated job search and application for LinkedIn and Wellfound. Searches for matching roles every 12 hours, AI-filters and scores them, applies automatically using Playwright + Kernel stealth browsers. Handles LinkedIn Easy Apply multi-step modals and Wellfound applications. Self-learning — asks you via Telegram when it hits an unknown question, suggests an AI answer, saves your reply, and never asks again. Recovers from browser crashes and retries failed applications automatically.
 ---
 
 # claw-apply
 
-Automated job search and application. Finds matching roles on LinkedIn and Wellfound, applies automatically, and learns from every unknown question.
+Automated job search and application. Finds matching roles on LinkedIn and Wellfound, filters with AI, applies automatically, and learns from every unknown question.
 
 ## Requirements
 
 - Node.js 18+
 - [Kernel](https://kernel.sh) account — stealth browsers + bot detection bypass (required)
 - Kernel CLI: `npm install -g @onkernel/cli` — see [kernel/skills](https://github.com/kernel/skills) for CLI + auth guidance
-- Telegram bot for notifications ([BotFather](https://t.me/BotFather))
-- Anthropic API key (optional — enables AI-enhanced keyword generation)
-- OpenClaw (optional — enables auto-scheduling via `setup.mjs`)
+- Telegram bot for notifications and interactive Q&A ([BotFather](https://t.me/BotFather))
+- Anthropic API key (optional — enables AI filtering, keyword generation, and suggested answers)
+- OpenClaw (optional — enables auto-scheduling via crons)
 
 > **Note:** Playwright is installed automatically via `npm install` as a library for browser connectivity. You don't need to install it globally or manage browsers yourself — Kernel handles all browser execution.
 
@@ -77,7 +77,7 @@ Create a `.env` file in the project root (gitignored — never commit this):
 
 ```bash
 KERNEL_API_KEY=your_kernel_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key   # optional, for AI keywords
+ANTHROPIC_API_KEY=your_anthropic_api_key   # optional, for AI features
 ```
 
 ### 5. Verify
@@ -94,57 +94,68 @@ Setup will:
 
 ### 6. Schedule with OpenClaw crons
 
-Scheduling is managed via OpenClaw cron jobs (not system crontab). Run `setup.mjs` to register them, or add manually:
+Scheduling is managed via OpenClaw cron jobs (not system crontab):
 
-- **Searcher**: `0 */12 * * *` America/Los_Angeles — every 12 hours
-- **Filter**: `30 * * * *` America/Los_Angeles — every hour at :30
-- **Applier**: disabled by default — enable manually when ready
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| Searcher | `0 */12 * * *` America/Los_Angeles | Search every 12 hours |
+| Filter | `30 * * * *` America/Los_Angeles | AI filter every hour at :30 |
+| Applier | disabled by default | Enable when ready to auto-apply |
+| Telegram Poller | `* * * * *` America/Los_Angeles | Process answer replies every minute |
 
-Do not use system crontab (`crontab -e`) — OpenClaw crons provide Telegram delivery, isolated sessions, and proper logging.
-
-The lockfile mechanism ensures only one instance runs at a time — if a searcher is already running, the cron invocation exits immediately.
+The lockfile mechanism ensures only one instance of each agent runs at a time.
 
 ### 7. Run manually
 
 ```bash
 node job_searcher.mjs            # search now
+node job_filter.mjs              # AI filter + score jobs
 node job_applier.mjs --preview   # preview queue without applying
 node job_applier.mjs             # apply now
+node telegram_poller.mjs         # process Telegram answer replies
 node status.mjs                  # show queue + run status
 ```
 
 ## How it works
 
-**Search** — runs your keyword searches on LinkedIn and Wellfound, paginates through results, inline-classifies each job (Easy Apply vs external ATS), filters exclusions, deduplicates, and queues new jobs. First run searches 90 days back; subsequent runs search 2 days.
+**Search** — runs your keyword searches on LinkedIn and Wellfound, paginates through results, classifies each job (Easy Apply vs external ATS), filters exclusions, deduplicates, and queues new jobs. First run searches 90 days back; subsequent runs search 2 days.
 
-**Apply** — picks up queued jobs sorted by priority (Easy Apply first), opens stealth browser sessions, fills forms using your profile + learned answers, and submits. Auto-refreshes Kernel auth sessions if login expires. Retries failed jobs (default 2 retries).
+**Filter** — submits jobs to Claude AI via Anthropic Batch API for scoring (1-10). Jobs below the threshold are filtered out. Cross-track deduplication keeps the highest-scoring copy. Two-phase design for cron compatibility.
 
-**Learn** — on unknown questions, messages you on Telegram. You reply, the answer is saved to `answers.json` with regex pattern matching, and the job is retried next run.
+**Apply** — picks up queued jobs sorted by priority (Easy Apply first), opens stealth browser sessions, fills forms using your profile + learned answers, and submits. Processes Telegram replies at start of each run. Reloads answers.json before each job. Auto-recovers from browser crashes. Retries failed jobs (default 2 retries). Per-job timeout of 10 minutes.
 
-**Lockfile** — prevents parallel runs. If searcher is running, a second invocation exits immediately.
+**Learn** — on unknown questions, Claude suggests an answer and you're messaged on Telegram. Reply with your answer or "ACCEPT" the AI suggestion. The Telegram poller saves it to `answers.json` instantly and the job is retried next run. Over time, all questions get answered and the system runs fully autonomously.
+
+**Lockfile** — prevents parallel runs. If an agent is already running, a second invocation exits immediately.
 
 ## File structure
 
 ```
 claw-apply/
 ├── job_searcher.mjs           Search agent
+├── job_filter.mjs             AI filter + scoring agent
 ├── job_applier.mjs            Apply agent
-├── setup.mjs                  Setup wizard + cron registration
+├── telegram_poller.mjs        Telegram answer reply processor
+├── setup.mjs                  Setup wizard
 ├── status.mjs                 Queue + run status report
 ├── lib/
 │   ├── browser.mjs            Kernel stealth browser factory
 │   ├── session.mjs            Auth session refresh via Kernel API
-│   ├── linkedin.mjs           LinkedIn search + Easy Apply
+│   ├── env.mjs                .env loader
+│   ├── linkedin.mjs           LinkedIn search + job classification
 │   ├── wellfound.mjs          Wellfound search + apply
 │   ├── form_filler.mjs        Form filling with pattern matching
-│   ├── queue.mjs              Job queue + config management
+│   ├── ai_answer.mjs          AI answer generation via Claude
+│   ├── filter.mjs             AI job scoring via Anthropic Batch API
 │   ├── keywords.mjs           AI-enhanced keyword generation
+│   ├── queue.mjs              Job queue with atomic writes
 │   ├── lock.mjs               PID lockfile + graceful shutdown
-│   ├── notify.mjs             Telegram notifications
+│   ├── notify.mjs             Telegram Bot API (send, getUpdates, reply)
+│   ├── telegram_answers.mjs   Telegram reply → answers.json processing
 │   ├── search_progress.mjs    Per-platform search resume tracking
 │   ├── constants.mjs          Shared constants + ATS patterns
 │   └── apply/
-│       ├── index.mjs          Handler registry
+│       ├── index.mjs          Handler registry + status normalization
 │       ├── easy_apply.mjs     LinkedIn Easy Apply (full)
 │       ├── wellfound.mjs      Wellfound apply (full)
 │       ├── greenhouse.mjs     Greenhouse (stub)
@@ -160,7 +171,7 @@ claw-apply/
 
 ## answers.json — self-learning Q&A
 
-When the applier can't answer a question, it messages you on Telegram. Your reply is saved and reused forever:
+When the applier can't answer a question, it asks Claude for a suggestion and messages you on Telegram. Your reply is saved and reused forever:
 
 ```json
 [
@@ -176,12 +187,12 @@ Patterns are matched case-insensitively and support regex. First match wins.
 
 | Platform | Status |
 |---|---|
-| LinkedIn Easy Apply | ✅ Full |
-| Wellfound | ✅ Full |
-| Greenhouse | 🚧 Stub |
-| Lever | 🚧 Stub |
-| Workday | 🚧 Stub |
-| Ashby | 🚧 Stub |
-| Jobvite | 🚧 Stub |
+| LinkedIn Easy Apply | Full |
+| Wellfound | Full |
+| Greenhouse | Stub |
+| Lever | Stub |
+| Workday | Stub |
+| Ashby | Stub |
+| Jobvite | Stub |
 
 External ATS jobs are queued and classified — stubs will be promoted to full implementations based on usage data.
