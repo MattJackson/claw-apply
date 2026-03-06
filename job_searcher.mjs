@@ -22,7 +22,7 @@ import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
-import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete } from './lib/search_progress.mjs';
+import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete, saveKeywords, getSavedKeywords } from './lib/search_progress.mjs';
 import { ensureLoggedIn } from './lib/session.mjs';
 
 async function main() {
@@ -58,22 +58,6 @@ async function main() {
   const profile = loadConfig(resolve(__dir, 'config/profile.json'));
   const anthropicKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
 
-  // Enhance keywords with AI if API key available
-  if (anthropicKey) {
-    console.log('🤖 Generating AI-enhanced search keywords...');
-    for (const search of searchConfig.searches) {
-      try {
-        const aiKeywords = await generateKeywords(search, profile, anthropicKey);
-        const merged = [...new Set([...search.keywords, ...aiKeywords])];
-        console.log(`  [${search.name}] ${search.keywords.length} → ${merged.length} keywords`);
-        search.keywords = merged;
-      } catch (e) {
-        console.warn(`  [${search.name}] AI keywords failed, using static: ${e.message}`);
-      }
-    }
-    console.log('');
-  }
-
   // Determine lookback: check for an in-progress run first, then fall back to first-run/normal logic
   const savedProgress = existsSync(resolve(__dir, 'data/search_progress.json'))
     ? JSON.parse(readFileSync(resolve(__dir, 'data/search_progress.json'), 'utf8'))
@@ -90,6 +74,27 @@ async function main() {
 
   // Init progress tracking — enables resume on restart
   initProgress(resolve(__dir, 'data'), lookbackDays);
+
+  // Enhance keywords with AI — reuse saved keywords from progress if resuming, never regenerate mid-run
+  for (const search of searchConfig.searches) {
+    const saved = getSavedKeywords('linkedin', search.name) ?? getSavedKeywords('wellfound', search.name);
+    if (saved) {
+      console.log(`  [${search.name}] reusing ${saved.length} saved keywords`);
+      search.keywords = saved;
+    } else if (anthropicKey) {
+      try {
+        const aiKeywords = await generateKeywords(search, profile, anthropicKey);
+        const merged = [...new Set([...search.keywords, ...aiKeywords])];
+        console.log(`🤖 [${search.name}] ${search.keywords.length} → ${merged.length} keywords (AI-enhanced)`);
+        search.keywords = merged;
+      } catch (e) {
+        console.warn(`  [${search.name}] AI keywords failed, using static: ${e.message}`);
+      }
+    }
+    saveKeywords('linkedin', search.name, search.keywords);
+    saveKeywords('wellfound', search.name, search.keywords);
+  }
+  console.log('');
 
   // Group searches by platform
   const liSearches = searchConfig.searches.filter(s => s.platforms?.includes('linkedin'));
