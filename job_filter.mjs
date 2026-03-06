@@ -100,7 +100,7 @@ async function collect(state, settings) {
   }
 
   console.log(`  Batch ended. Downloading results...`);
-  const results = await downloadResults(state.batch_id, apiKey);
+  const results = await downloadResults(state.batch_id, apiKey, state.id_map || {});
 
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
   const globalMin = searchConfig.filter_min_score ?? 5;
@@ -195,7 +195,7 @@ async function submit(settings, searchConfig, candidateProfile) {
   const model = settings.filter?.model || DEFAULT_MODEL;
   console.log(`🚀 Submitting batch — ${filterable.length} jobs, model: ${model}`);
 
-  const batchId = await submitBatch(filterable, jobProfilesByTrack, searchConfig, candidateProfile, model, apiKey);
+  const { batchId, idMap } = await submitBatch(filterable, jobProfilesByTrack, searchConfig, candidateProfile, model, apiKey);
 
   const submittedAt = new Date().toISOString();
   writeState({
@@ -204,6 +204,7 @@ async function submit(settings, searchConfig, candidateProfile) {
     job_count: filterable.length,
     model,
     tracks: Object.keys(jobProfilesByTrack),
+    id_map: idMap,
   });
 
   console.log(`  Batch submitted: ${batchId}`);
