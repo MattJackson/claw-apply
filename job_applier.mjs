@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 import { getJobsByStatus, updateJobStatus, appendLog, loadConfig } from './lib/queue.mjs';
+import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
 import { verifyLogin as liLogin, applyLinkedIn } from './lib/linkedin.mjs';
@@ -25,6 +26,7 @@ import {
 const isPreview = process.argv.includes('--preview');
 
 async function main() {
+  acquireLock('applier', resolve(__dir, 'data'));
   console.log('🚀 claw-apply: Job Applier starting\n');
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));

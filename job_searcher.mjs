@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 import { addJobs, loadQueue, loadConfig } from './lib/queue.mjs';
+import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
@@ -18,6 +19,7 @@ import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
 
 async function main() {
+  acquireLock('searcher', resolve(__dir, 'data'));
   console.log('🔍 claw-apply: Job Searcher starting\n');
 
   // Load config
