@@ -20,11 +20,11 @@ import { applyToJob, supportedTypes } from './lib/apply/index.mjs';
 import { sendTelegram, formatApplySummary } from './lib/notify.mjs';
 import { generateAnswer } from './lib/ai_answer.mjs';
 import {
-  APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES
+  APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES,
+  APPLY_RUN_TIMEOUT_MS, PER_JOB_TIMEOUT_MS
 } from './lib/constants.mjs';
 
-// Which apply types are currently enabled
-const ENABLED_APPLY_TYPES = ['easy_apply'];
+const DEFAULT_ENABLED_APPLY_TYPES = ['easy_apply'];
 
 const isPreview = process.argv.includes('--preview');
 
@@ -41,6 +41,7 @@ async function main() {
   const formFiller = new FormFiller(profile, answers);
   const maxApps = settings.max_applications_per_run || Infinity;
   const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
+  const enabledTypes = settings.enabled_apply_types || DEFAULT_ENABLED_APPLY_TYPES;
   const apiKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
 
   const startedAt = Date.now();
@@ -72,14 +73,14 @@ async function main() {
 
   // Get + sort jobs — only enabled apply types
   const allJobs = getJobsByStatus(['new', 'needs_answer'])
-    .filter(j => ENABLED_APPLY_TYPES.includes(j.apply_type))
+    .filter(j => enabledTypes.includes(j.apply_type))
     .sort((a, b) => {
       const ap = APPLY_PRIORITY.indexOf(a.apply_type ?? 'unknown_external');
       const bp = APPLY_PRIORITY.indexOf(b.apply_type ?? 'unknown_external');
       return (ap === -1 ? 99 : ap) - (bp === -1 ? 99 : bp);
     });
   const jobs = allJobs.slice(0, maxApps);
-  console.log(`Enabled types: ${ENABLED_APPLY_TYPES.join(', ')}\n`);
+  console.log(`Enabled types: ${enabledTypes.join(', ')}\n`);
   results.total = jobs.length;
 
   if (jobs.length === 0) { console.log('Nothing to apply to. Run job_searcher.mjs first.'); return; }
@@ -128,8 +129,18 @@ async function main() {
 
         console.log(`  → [${job.apply_type}] ${job.title} @ ${job.company || '?'}`);
 
+        // Check overall run timeout
+        if (Date.now() - startedAt > APPLY_RUN_TIMEOUT_MS) {
+          console.log(`  ⏱️  Run timeout (${Math.round(APPLY_RUN_TIMEOUT_MS / 60000)}min) — stopping`);
+          break;
+        }
+
         try {
-          const result = await applyToJob(browser.page, job, formFiller);
+          // Per-job timeout — prevents a single hung browser from blocking the run
+          const result = await Promise.race([
+            applyToJob(browser.page, job, formFiller),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Job apply timed out')), PER_JOB_TIMEOUT_MS)),
+          ]);
           await handleResult(job, result, results, settings, profile, apiKey);
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);
