@@ -135,7 +135,26 @@ async function main() {
           break;
         }
 
+        // Reload answers.json before each job — picks up Telegram replies between jobs
         try {
+          const freshAnswers = existsSync(answersPath) ? loadConfig(answersPath) : [];
+          formFiller.answers = freshAnswers;
+        } catch { /* keep existing answers on read error */ }
+
+        try {
+          // If this job previously returned needs_answer and has an AI or user-provided answer,
+          // inject it into formFiller so the question gets answered on retry
+          if (job.status === 'needs_answer' && job.pending_question && job.ai_suggested_answer) {
+            const questionLabel = job.pending_question.label || job.pending_question;
+            const answer = job.ai_suggested_answer;
+            // Only inject if not already in answers (avoid duplicates across retries)
+            const alreadyHas = formFiller.answers.some(a => a.pattern === questionLabel);
+            if (!alreadyHas) {
+              formFiller.answers.push({ pattern: questionLabel, answer });
+              console.log(`    ℹ️  Injecting AI answer for "${questionLabel}": "${String(answer).slice(0, 50)}"`);
+            }
+          }
+
           // Per-job timeout — prevents a single hung browser from blocking the run
           const result = await Promise.race([
             applyToJob(browser.page, job, formFiller),
@@ -145,6 +164,24 @@ async function main() {
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);
           if (e.stack) console.error(`    Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
+
+          // Browser crash recovery — check if page is still usable
+          const pageAlive = await browser.page.evaluate(() => true).catch(() => false);
+          if (!pageAlive) {
+            console.log(`    ℹ️  Browser session dead — creating new browser`);
+            await browser.browser?.close().catch(() => {});
+            try {
+              const newBrowser = platform === 'external'
+                ? await createBrowser(settings, null)
+                : await createBrowser(settings, platform);
+              browser = newBrowser;
+              console.log(`    ✅ New browser session created`);
+            } catch (browserErr) {
+              console.error(`    ❌ Could not recover browser: ${browserErr.message}`);
+              break; // can't continue without a browser
+            }
+          }
+
           const retries = (job.retry_count || 0) + 1;
           if (retries <= maxRetries) {
             updateJobStatus(job.id, 'new', { retry_count: retries });
@@ -241,6 +278,7 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       break;
     }
 
+    case 'no_modal':
     case 'skipped_no_apply':
     case 'skipped_easy_apply_unsupported':
       console.log(`    ⏭️  Skipped — ${status}`);
