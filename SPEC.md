@@ -1,36 +1,56 @@
-# claw-apply — Skill Spec v0.1
+# claw-apply — Technical Spec
 
-Automated job search and application skill for OpenClaw.
-Searches LinkedIn and Wellfound for matching roles, applies automatically using Playwright + Kernel stealth browsers.
+Automated job search and application engine. Searches LinkedIn and Wellfound for matching roles, applies automatically using Playwright + Kernel stealth browsers, and self-learns from unknown questions.
 
 ---
 
 ## Architecture
 
-### Two agents
+### Two agents, shared queue
 
 **JobSearcher** (`job_searcher.mjs`)
-- Runs on a schedule (default: hourly)
-- Searches configured platforms with configured queries
+- Runs on schedule (default: hourly)
+- Searches configured platforms with configured keywords
+- LinkedIn: paginates through up to 40 pages of results
+- Wellfound: infinite-scrolls up to 10 times to load all results
 - Filters out excluded roles/companies
-- Dedupes against existing queue
+- Deduplicates by job ID and URL against existing queue
 - Writes new jobs to `jobs_queue.json` with status `new`
-- Sends Telegram summary: "Found X new jobs"
+- Sends Telegram summary
 
 **JobApplier** (`job_applier.mjs`)
-- Runs on a schedule (default: every 6 hours)
-- Reads `jobs_queue.json` for status `new` + `needs_answer`
-- Attempts to apply to each job
-- On success → status: `applied`
-- On unknown question → messages user via Telegram, status: `needs_answer`
-- On skip/fail → status: `skipped` or `failed`
-- Sends Telegram summary when done
+- Runs on schedule (default: every 6 hours)
+- Reads queue for status `new` + `needs_answer`
+- Respects `max_applications_per_run` cap
+- LinkedIn: navigates directly to job URL, detects apply type (Easy Apply / external / recruiter-only), fills multi-step modal
+- Wellfound: navigates to job, fills form, submits
+- Detects honeypot questions and skips
+- On unknown required fields: messages user via Telegram, marks `needs_answer`
+- On error: retries up to `max_retries` (default 2) before marking `failed`
+- Sends summary with granular skip reasons
+
+**Preview mode** (`--preview`): shows queued jobs without applying.
+
+### Shared modules
+
+| Module | Responsibility |
+|--------|---------------|
+| `lib/constants.mjs` | All timeouts, selectors, defaults — no magic numbers in code |
+| `lib/browser.mjs` | Browser factory — Kernel stealth (default) with local Playwright fallback |
+| `lib/form_filler.mjs` | Generic form filling — custom answers first, then built-in profile matching |
+| `lib/queue.mjs` | Queue CRUD with in-memory caching, config file validation |
+| `lib/notify.mjs` | Telegram Bot API with rate limiting (1.5s between sends) |
+| `lib/linkedin.mjs` | LinkedIn search (paginated) + Easy Apply (multi-step modal) |
+| `lib/wellfound.mjs` | Wellfound search (infinite scroll) + apply |
 
 ---
 
-## Config Files (user sets up once)
+## Config files
+
+All user config is gitignored. Example templates are committed.
 
 ### `profile.json`
+
 ```json
 {
   "name": { "first": "Jane", "last": "Smith" },
@@ -51,81 +71,41 @@ Searches LinkedIn and Wellfound for matching roles, applies automatically using 
   },
   "willing_to_relocate": false,
   "desired_salary": 150000,
-  "cover_letter": "Your cover letter text here..."
+  "cover_letter": "Your cover letter text here."
 }
 ```
 
 ### `search_config.json`
+
 ```json
 {
+  "first_run_days": 90,
   "searches": [
     {
       "name": "Founding GTM",
       "track": "gtm",
-      "keywords": [
-        "founding account executive",
-        "first sales hire",
-        "first GTM hire",
-        "founding AE",
-        "head of sales startup remote"
-      ],
+      "keywords": ["founding account executive", "first sales hire"],
       "platforms": ["linkedin", "wellfound"],
       "filters": {
         "remote": true,
-        "posted_within_days": 2
-      },
-      "exclude_keywords": ["BDR", "SDR", "staffing", "insurance", "retail", "consumer", "recruiter"],
-      "salary_min": 130000
-    },
-    {
-      "name": "Enterprise AE",
-      "track": "ae",
-      "keywords": [
-        "enterprise account executive SaaS remote",
-        "senior account executive technical SaaS remote"
-      ],
-      "platforms": ["linkedin"],
-      "filters": {
-        "remote": true,
         "posted_within_days": 2,
-        "easy_apply_only": true
+        "easy_apply_only": false
       },
-      "exclude_keywords": ["BDR", "SDR", "SMB", "staffing"],
-      "salary_min": 150000
+      "exclude_keywords": ["BDR", "SDR", "staffing", "insurance"]
     }
   ]
 }
 ```
 
-### `answers.json`
-Flat array of pattern → answer mappings. Pattern is substring match (case-insensitive). First match wins.
-```json
-[
-  { "pattern": "quota attainment", "answer": "1.12", "note": "FY24 $1.2M quota, hit $1.12M" },
-  { "pattern": "sponsor", "answer": "No" },
-  { "pattern": "authorized", "answer": "Yes" },
-  { "pattern": "relocat", "answer": "No" },
-  { "pattern": "years.*sales", "answer": "7" },
-  { "pattern": "years.*enterprise", "answer": "5" },
-  { "pattern": "years.*crm", "answer": "7" },
-  { "pattern": "1.*10.*scale", "answer": "9" },
-  { "pattern": "salary", "answer": "150000" },
-  { "pattern": "start date", "answer": "Immediately" }
-]
-```
-
 ### `settings.json`
+
 ```json
 {
-  "mode": "A",
-  "review_window_minutes": 30,
-  "schedules": {
-    "search": "0 * * * *",
-    "apply": "0 */6 * * *"
-  },
   "max_applications_per_run": 50,
+  "max_retries": 2,
   "notifications": {
-    "telegram_user_id": "YOUR_TELEGRAM_ID"
+    "telegram_user_id": "YOUR_TELEGRAM_USER_ID",
+    "bot_token": "YOUR_TELEGRAM_BOT_TOKEN"
   },
   "kernel": {
     "proxy_id": "YOUR_KERNEL_PROXY_ID",
@@ -136,16 +116,29 @@ Flat array of pattern → answer mappings. Pattern is substring match (case-inse
   },
   "browser": {
     "provider": "kernel",
-    "fallback": "local"
+    "playwright_path": null
   }
 }
 ```
 
+### `answers.json`
+
+Flat array of pattern-answer pairs. Patterns are matched case-insensitively and support regex. First match wins.
+
+```json
+[
+  { "pattern": "quota attainment", "answer": "1.12" },
+  { "pattern": "years.*enterprise", "answer": "5" },
+  { "pattern": "1.*10.*scale", "answer": "9" }
+]
+```
+
 ---
 
-## Data Files (auto-managed)
+## Data files (auto-managed)
 
 ### `jobs_queue.json`
+
 ```json
 [
   {
@@ -158,6 +151,7 @@ Flat array of pattern → answer mappings. Pattern is substring match (case-inse
     "found_at": "2026-03-05T22:00:00Z",
     "status": "new",
     "status_updated_at": "2026-03-05T22:00:00Z",
+    "retry_count": 0,
     "pending_question": null,
     "applied_at": null,
     "notes": null
@@ -165,83 +159,93 @@ Flat array of pattern → answer mappings. Pattern is substring match (case-inse
 ]
 ```
 
-**Statuses:** `new` → `applied` / `skipped` / `failed` / `needs_answer`
+### Job statuses
+
+| Status | Meaning | Next action |
+|--------|---------|-------------|
+| `new` | Found, waiting to apply | Applier picks it up |
+| `applied` | Successfully submitted | Done |
+| `needs_answer` | Blocked on unknown question | Applier retries after user answers |
+| `failed` | Failed after max retries | Manual review |
+| `skipped` | Honeypot detected | Permanent skip |
+| `skipped_recruiter_only` | LinkedIn recruiter-only | Permanent skip |
+| `skipped_external_unsupported` | External ATS | Saved for future ATS support |
+| `skipped_easy_apply_unsupported` | No Easy Apply button | Permanent skip |
 
 ### `applications_log.json`
-Append-only history of every application attempt with outcome.
+
+Append-only history of every application attempt with outcome, timestamps, and metadata.
 
 ---
 
-## Unknown Question Flow
+## Unknown question flow
 
-1. Applier hits a required field it can't answer
-2. Marks job as `needs_answer`, stores the question text in `pending_question`
-3. Sends Telegram: *"Applying to Senior AE @ Acme Corp and hit this question: 'What was your last quota attainment in $M?' — what should I answer?"*
+1. Applier encounters a required field with no matching answer
+2. Marks job as `needs_answer`, stores question in `pending_question`
+3. Sends Telegram: "Applying to Senior AE @ Acme Corp — question: 'What was your quota attainment?' — what should I answer?"
 4. Moves on to next job
-5. User replies → answer saved to `answers.json`
-6. Next applier run retries all `needs_answer` jobs
+5. User replies with answer
+6. Answer saved to `answers.json` as pattern match
+7. Next applier run retries all `needs_answer` jobs
 
 ---
 
-## Mode A vs Mode B
+## Retry logic
 
-**Mode A (fully automatic):**
-Search → Queue → Apply. No intervention required.
+When an application fails due to a transient error (timeout, network issue, page didn't load):
 
-**Mode B (soft gate):**
-Search → Queue → Telegram summary sent to user → 30 min window to reply with any job IDs to skip → Apply runs.
-
-Configured via `settings.json` → `mode: "A"` or `"B"`
+1. `retry_count` is incremented on the job
+2. Job status is reset to `new` so the next run picks it up
+3. After `max_retries` (default 2) failures, job is marked `failed` permanently
+4. Failed jobs are logged to `applications_log.json` with error details
 
 ---
 
-## File Structure
+## File structure
 
 ```
 claw-apply/
-├── SKILL.md              ← OpenClaw skill entry point
-├── SPEC.md               ← this file
-├── job_searcher.mjs      ← search agent
-├── job_applier.mjs       ← apply agent
+├── README.md                  Documentation
+├── SKILL.md                   OpenClaw skill manifest
+├── SPEC.md                    This file
+├── job_searcher.mjs           Search agent
+├── job_applier.mjs            Apply agent
+├── setup.mjs                  Setup wizard
 ├── lib/
-│   ├── browser.mjs       ← Kernel/Playwright browser factory
-│   ├── form_filler.mjs   ← form filling logic
-│   ├── linkedin.mjs      ← LinkedIn search + apply
-│   ├── wellfound.mjs     ← Wellfound search + apply
-│   └── notify.mjs        ← Telegram notifications
+│   ├── constants.mjs          Shared constants and defaults
+│   ├── browser.mjs            Kernel/Playwright browser factory
+│   ├── form_filler.mjs        Form filling with pattern matching
+│   ├── linkedin.mjs           LinkedIn search + Easy Apply
+│   ├── wellfound.mjs          Wellfound search + apply
+│   ├── queue.mjs              Queue management + config validation
+│   └── notify.mjs             Telegram notifications + rate limiting
 ├── config/
-│   ├── profile.json      ← user fills this
-│   ├── search_config.json← user fills this
-│   ├── answers.json      ← auto-grows over time
-│   └── settings.json     ← user fills this
+│   ├── *.example.json         Templates (committed)
+│   └── *.json                 User config (gitignored)
 └── data/
-    ├── jobs_queue.json   ← auto-managed
-    └── applications_log.json ← auto-managed
+    ├── jobs_queue.json         Job queue (auto-managed)
+    └── applications_log.json   Application history (auto-managed)
 ```
 
 ---
 
-## Setup (user steps)
+## Roadmap
 
-1. Install: `openclaw skill install claw-apply`
-2. Configure Kernel Managed Auth for LinkedIn + Wellfound (or provide local Chrome)
-3. Create a residential proxy in Kernel: `kernel proxies create --type residential --country US`
-4. Fill in `config/profile.json`, `config/search_config.json`, `config/settings.json`
-5. Run: `openclaw skill run claw-apply setup` — registers crons, verifies login, sends test notification
-6. Done. Runs automatically.
+### v1 (current)
+- [x] LinkedIn Easy Apply (multi-step modal, pagination)
+- [x] Wellfound apply (infinite scroll)
+- [x] Kernel stealth browsers + residential proxy
+- [x] Self-learning answer bank with regex patterns
+- [x] Retry logic with configurable max retries
+- [x] Preview mode (`--preview`)
+- [x] Configurable application caps
+- [x] Telegram notifications with rate limiting
+- [x] Config validation with clear error messages
+- [x] In-memory queue caching for performance
+- [x] Constants extracted — no magic numbers in code
 
----
-
-## v1 Scope
-
-- [x] LinkedIn Easy Apply
-- [x] Wellfound apply
-- [x] Kernel stealth browser + residential proxy
-- [x] Mode A + Mode B
-- [x] Unknown question → Telegram → answers.json flow
-- [x] Deduplication
-- [x] Hourly search / 6hr apply cron
-- [ ] Indeed (v2)
-- [ ] External ATS / Greenhouse / Lever (v2)
-- [ ] Job scoring/ranking (v2)
-- [ ] Cover letter generation per-job via LLM (v2)
+### v2 (planned)
+- [ ] Indeed support
+- [ ] External ATS support (Greenhouse, Lever)
+- [ ] Job scoring and ranking
+- [ ] Per-job cover letter generation via LLM
