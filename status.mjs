@@ -118,9 +118,11 @@ function buildStatus() {
     },
     queue: {
       total: queue.length,
+      duplicate: byStatus['duplicate'] || 0,
       new: byStatus['new'] || 0,
       filtered: byStatus['filtered'] || 0,
       applied: byStatus['applied'] || 0,
+      closed: byStatus['closed'] || 0,
       failed: byStatus['failed'] || 0,
       needs_answer: byStatus['needs_answer'] || 0,
       skipped_external: byStatus['skipped_external_unsupported'] || 0,
@@ -220,12 +222,14 @@ function formatReport(s) {
   if (lastApplierDetail) lines.push(lastApplierDetail);
 
   // Queue summary — only show non-zero counts
-  lines.push('', `📋 *Queue* — ${q.total} total`);
+  const unique = q.total - (q.duplicate || 0);
+  lines.push('', `📋 *Queue* — ${unique} unique jobs (${q.duplicate || 0} dupes)`);
 
   const queueLines = [
     [q.new, 'Ready to apply'],
     [q.applied, 'Applied'],
     [q.filtered || 0, 'AI filtered'],
+    [q.closed || 0, 'Closed'],
     [q.needs_answer, 'Needs answer'],
     [q.skipped_other || 0, 'Incomplete/stuck'],
     [q.skipped_no_apply, 'No apply button'],
@@ -252,10 +256,19 @@ function formatReport(s) {
   return lines.join('\n');
 }
 
+import { loadConfig } from './lib/queue.mjs';
+import { sendTelegram } from './lib/notify.mjs';
+
+const telegramMode = process.argv.includes('--telegram');
 const status = buildStatus();
 
 if (jsonMode) {
   console.log(JSON.stringify(status, null, 2));
 } else {
-  console.log(formatReport(status));
+  const report = formatReport(status);
+  console.log(report.replace(/\*/g, ''));
+  if (telegramMode) {
+    const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+    await sendTelegram(settings, report);
+  }
 }
