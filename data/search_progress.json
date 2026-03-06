@@ -1,0 +1,7 @@
+{
+  "lookback_days": 90,
+  "started_at": 1741220400000,
+  "completed": ["linkedin:Founding GTM"],
+  "pending": ["linkedin:Enterprise AE", "wellfound:Founding GTM"],
+  "stats:linkedin:Founding GTM": { "found": 913, "added": 814, "completed_at": 1741224000000 }
+}

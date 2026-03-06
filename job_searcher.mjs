@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 import { addJobs, loadQueue, loadConfig } from './lib/queue.mjs';
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
@@ -69,9 +69,19 @@ async function main() {
     console.log('');
   }
 
+  // Determine lookback: check for an in-progress run first, then fall back to first-run/normal logic
+  const savedProgress = existsSync(resolve(__dir, 'data/search_progress.json'))
+    ? JSON.parse(readFileSync(resolve(__dir, 'data/search_progress.json'), 'utf8'))
+    : null;
   const isFirstRun = loadQueue().length === 0;
-  const lookbackDays = isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : (searchConfig.posted_within_days || 2);
-  if (isFirstRun) console.log(`📅 First run — looking back ${lookbackDays} days\n`);
+  const lookbackDays = savedProgress?.lookback_days
+    || (isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : (searchConfig.posted_within_days || 2));
+
+  if (savedProgress?.lookback_days) {
+    console.log(`🔁 Resuming ${lookbackDays}-day search run\n`);
+  } else if (isFirstRun) {
+    console.log(`📅 First run — looking back ${lookbackDays} days\n`);
+  }
 
   // Init progress tracking — enables resume on restart
   initProgress(resolve(__dir, 'data'), lookbackDays);
