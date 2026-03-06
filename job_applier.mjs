@@ -180,10 +180,12 @@ async function main() {
           }
 
           // Per-job timeout — prevents a single hung browser from blocking the run
+          const applyStartedAt = Date.now();
           const result = await Promise.race([
             applyToJob(browser.page, job, formFiller),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Job apply timed out')), PER_JOB_TIMEOUT_MS)),
           ]);
+          result.applyStartedAt = applyStartedAt;
           await handleResult(job, result, results, settings, profile, apiKey);
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);
@@ -242,18 +244,19 @@ async function main() {
 }
 
 async function handleResult(job, result, results, settings, profile, apiKey) {
-  const { status, meta, pending_question, externalUrl, ats_platform } = result;
+  const { status, meta, pending_question, externalUrl, ats_platform, applyStartedAt } = result;
   const title = meta?.title || job.title || '?';
   const company = meta?.company || job.company || '?';
+  const applyDuration = applyStartedAt ? Math.round((Date.now() - applyStartedAt) / 1000) : null;
 
   // Track per-job detail for summary
-  results.jobDetails.push({ title, company, url: job.url, status });
+  results.jobDetails.push({ title, company, url: job.url, status, duration: applyDuration });
 
   switch (status) {
     case 'submitted':
-      console.log(`    ✅ Applied!`);
-      updateJobStatus(job.id, 'applied', { title, company, applied_at: Date.now() });
-      appendLog({ ...job, title, company, status: 'applied', applied_at: Date.now() });
+      console.log(`    ✅ Applied!${applyDuration ? ` (${applyDuration}s)` : ''}`);
+      updateJobStatus(job.id, 'applied', { title, company, applied_at: Date.now(), apply_started_at: applyStartedAt });
+      appendLog({ ...job, title, company, status: 'applied', applied_at: Date.now(), apply_started_at: applyStartedAt });
       results.submitted++;
       break;
 
