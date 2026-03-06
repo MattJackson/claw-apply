@@ -111,8 +111,8 @@ async function main() {
       schedule: { kind: 'cron', expr: searchSchedule, tz: settings.timezone || 'America/Los_Angeles' },
       payload: {
         kind: 'agentTurn',
-        message: `Run the claw-apply job searcher: \`cd ${__dir} && node job_searcher.mjs 2>&1\`. Report how many new jobs were found.`,
-        timeoutSeconds: 0,
+        message: `Launch the claw-apply job searcher as a detached background process: \`cd ${__dir} && nohup node job_searcher.mjs >> /tmp/claw-searcher.log 2>&1 & echo $!\`. Confirm the PID and that it started successfully.`,
+        timeoutSeconds: 30,
       },
       delivery: { mode: 'announce', to: telegramUserId },
       sessionTarget: 'isolated',
@@ -124,8 +124,8 @@ async function main() {
       schedule: { kind: 'cron', expr: applySchedule, tz: settings.timezone || 'America/Los_Angeles' },
       payload: {
         kind: 'agentTurn',
-        message: `Run the claw-apply job applier: \`cd ${__dir} && node job_applier.mjs 2>&1\`. Report results.`,
-        timeoutSeconds: 0,
+        message: `Launch the claw-apply job applier as a detached background process: \`cd ${__dir} && nohup node job_applier.mjs >> /tmp/claw-applier.log 2>&1 & echo $!\`. Confirm the PID and that it started successfully.`,
+        timeoutSeconds: 30,
       },
       delivery: { mode: 'announce', to: telegramUserId },
       sessionTarget: 'isolated',
