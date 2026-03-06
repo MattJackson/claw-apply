@@ -204,7 +204,7 @@ async function main() {
   // Summary
   const summary = formatSearchSummary(totalAdded, totalSeen - totalAdded, platformsRun);
   console.log(`\n${summary.replace(/\*/g, '')}`);
-  await sendTelegram(settings, summary).catch(() => {});
+  if (totalAdded > 0) await sendTelegram(settings, summary).catch(() => {});
 
   writeLastRun(true);
   // Archive final progress snapshot before clearing (for audit — answers "what was searched?")
