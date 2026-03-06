@@ -11,7 +11,7 @@ Automated job search and application. Finds matching roles on LinkedIn and Wellf
 
 - Node.js 18+
 - [Kernel](https://kernel.sh) account — stealth browsers + bot detection bypass (required)
-- Kernel CLI: `npm install -g @onkernel/cli`
+- Kernel CLI: `npm install -g @onkernel/cli` — see [kernel/skills](https://github.com/kernel/skills) for CLI + auth guidance
 - Telegram bot for notifications ([BotFather](https://t.me/BotFather))
 - Anthropic API key (optional — enables AI-enhanced keyword generation)
 - OpenClaw (optional — enables auto-scheduling via `setup.mjs`)
