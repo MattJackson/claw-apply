@@ -111,6 +111,7 @@ function buildStatus() {
     queue: {
       total: queue.length,
       new: byStatus['new'] || 0,
+      filtered: byStatus['filtered'] || 0,
       applied: byStatus['applied'] || 0,
       failed: byStatus['failed'] || 0,
       needs_answer: byStatus['needs_answer'] || 0,
@@ -209,6 +210,7 @@ function formatReport(s) {
   }
 
   lines.push(
+    `  🚫 AI filtered:         ${q.filtered || 0}`,
     `  ✅ Applied:             ${q.applied}`,
     `  🔁 Already applied:     ${q.already_applied || 0}`,
     `  💬 Needs your answer:   ${q.needs_answer}`,

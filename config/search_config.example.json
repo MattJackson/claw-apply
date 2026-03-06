@@ -1,10 +1,12 @@
 {
   "_note": "Configure your job searches here. Each search runs on both listed platforms.",
   "first_run_days": 90,
+  "filter_min_score": 5,
   "searches": [
     {
       "name": "Founding GTM",
       "track": "gtm",
+      "filter_min_score": 5,
       "keywords": [
         "founding account executive",
         "first sales hire",
@@ -23,6 +25,7 @@
     {
       "name": "Enterprise AE",
       "track": "ae",
+      "filter_min_score": 5,
       "keywords": [
         "enterprise account executive SaaS remote",
         "senior account executive technical SaaS remote",
