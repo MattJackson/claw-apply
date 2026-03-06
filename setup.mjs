@@ -4,10 +4,12 @@
  * Verifies config, tests logins, registers cron jobs
  * Run once after configuring: node setup.mjs
  */
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { loadConfig } from './lib/queue.mjs';
+import { loadEnv } from './lib/env.mjs';
+loadEnv();
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +47,16 @@ async function main() {
   // Create data directory
   mkdirSync(resolve(__dir, 'data'), { recursive: true });
   console.log('\n✅ Data directory ready');
+
+  // Write .env file with API keys (gitignored — never embedded in cron payloads)
+  const envPath = resolve(__dir, '.env');
+  const envLines = [];
+  if (process.env.KERNEL_API_KEY) envLines.push(`KERNEL_API_KEY=${process.env.KERNEL_API_KEY}`);
+  if (process.env.ANTHROPIC_API_KEY) envLines.push(`ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`);
+  if (envLines.length) {
+    writeFileSync(envPath, envLines.join('\n') + '\n', { mode: 0o600 });
+    console.log('✅ API keys written to .env (mode 600, gitignored)');
+  }
 
   // Test Telegram
   if (settings.notifications?.bot_token && settings.notifications?.telegram_user_id) {
@@ -88,9 +100,8 @@ async function main() {
   const telegramUserId = settings.notifications?.telegram_user_id;
   const searchSchedule = settings.schedules?.search || '0 * * * *';
   const applySchedule = settings.schedules?.apply || '0 */6 * * *';
-  const kernelApiKey = process.env.KERNEL_API_KEY;
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
 
+  // API keys are loaded from .env at runtime — never embedded in cron payloads
   if (gatewayToken && telegramUserId) {
     console.log('\nRegistering cron jobs...');
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${gatewayToken}` };
@@ -100,7 +111,7 @@ async function main() {
       schedule: { kind: 'cron', expr: searchSchedule, tz: settings.timezone || 'America/Los_Angeles' },
       payload: {
         kind: 'agentTurn',
-        message: `Run the claw-apply job searcher: \`cd ${__dir} && KERNEL_API_KEY=${kernelApiKey}${anthropicApiKey ? ` ANTHROPIC_API_KEY=${anthropicApiKey}` : ''} node job_searcher.mjs 2>&1\`. Report how many new jobs were found.`,
+        message: `Run the claw-apply job searcher: \`cd ${__dir} && node job_searcher.mjs 2>&1\`. Report how many new jobs were found.`,
         timeoutSeconds: 0,
       },
       delivery: { mode: 'announce', to: telegramUserId },
@@ -113,7 +124,7 @@ async function main() {
       schedule: { kind: 'cron', expr: applySchedule, tz: settings.timezone || 'America/Los_Angeles' },
       payload: {
         kind: 'agentTurn',
-        message: `Run the claw-apply job applier: \`cd ${__dir} && KERNEL_API_KEY=${kernelApiKey}${anthropicApiKey ? ` ANTHROPIC_API_KEY=${anthropicApiKey}` : ''} node job_applier.mjs 2>&1\`. Report results.`,
+        message: `Run the claw-apply job applier: \`cd ${__dir} && node job_applier.mjs 2>&1\`. Report results.`,
         timeoutSeconds: 0,
       },
       delivery: { mode: 'announce', to: telegramUserId },

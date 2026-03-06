@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { loadEnv } from './lib/env.mjs';
+loadEnv(); // load .env before anything else
 /**
  * job_applier.mjs — claw-apply Job Applier
  * Reads jobs queue and applies using the appropriate handler per apply_type

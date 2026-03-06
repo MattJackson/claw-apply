@@ -4,6 +4,10 @@
  * Searches LinkedIn + Wellfound and populates the jobs queue
  * Run via cron or manually: node job_searcher.mjs
  */
+import { loadEnv } from './lib/env.mjs';
+loadEnv(); // load .env before anything else
+/**
+ */
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
