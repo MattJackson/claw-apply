@@ -137,9 +137,8 @@ async function main() {
         browser = await createBrowser(settings, null); // no profile needed
       } else {
         // Check auth status before creating browser
-        const connectionIds = settings.kernel?.connection_ids || {};
         const kernelApiKey = process.env.KERNEL_API_KEY || settings.kernel_api_key;
-        const authResult = await ensureAuth(platform, kernelApiKey, connectionIds);
+        const authResult = await ensureAuth(platform, kernelApiKey);
         if (!authResult.ok) {
           console.error(`  ❌ ${platform} auth failed: ${authResult.reason}`);
           await sendTelegram(settings, `⚠️ *${platform}* auth failed — ${authResult.reason}`).catch(() => {});
