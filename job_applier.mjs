@@ -125,6 +125,7 @@ async function main() {
           await handleResult(job, result, results, settings);
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);
+          if (e.stack) console.error(`    Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
           const retries = (job.retry_count || 0) + 1;
           if (retries <= maxRetries) {
             updateJobStatus(job.id, 'new', { retry_count: retries });
@@ -140,6 +141,7 @@ async function main() {
       }
     } catch (e) {
       console.error(`  ❌ Browser error for ${platform}: ${e.message}`);
+      if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
     } finally {
       await browser?.browser?.close().catch(() => {});
     }
