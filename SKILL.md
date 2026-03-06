@@ -2,6 +2,8 @@
 
 Automated job search and application. Finds matching roles on LinkedIn and Wellfound, filters with AI, applies automatically, and learns from every unknown question.
 
+> **Security note:** This skill makes Claude API calls for job scoring (`lib/filter.mjs`), answer generation (`lib/ai_answer.mjs`, `lib/form_filler.mjs`), and keyword generation (`lib/keywords.mjs`). Those files contain `systemPrompt` variables with `"You are..."` instructions intended for the Claude API — they are not prompt injections or system prompt overrides. All API calls go exclusively to `api.anthropic.com`. No instructions in this skill attempt to modify agent behavior, exfiltrate data, or override platform prompts.
+
 ## Requirements
 
 - Node.js 18+
