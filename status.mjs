@@ -264,11 +264,12 @@ const status = buildStatus();
 
 if (jsonMode) {
   console.log(JSON.stringify(status, null, 2));
-} else {
+} else if (telegramMode) {
   const report = formatReport(status);
-  console.log(report.replace(/\*/g, ''));
-  if (telegramMode) {
-    const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-    await sendTelegram(settings, report);
-  }
+  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  await sendTelegram(settings, report);
+  console.log('Status sent to Telegram');
+} else {
+  // Console output keeps markdown * for agents that relay stdout to Telegram
+  console.log(formatReport(status));
 }
