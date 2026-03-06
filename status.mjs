@@ -174,13 +174,21 @@ function formatReport(s) {
   ];
   if (lastRunDetail) lines.push(lastRunDetail);
 
-  // Keyword progress per track
+  // Keyword progress grouped by platform
   const kp = s.searcher.keyword_progress;
   if (kp && kp.length > 0) {
+    const byPlatform = {};
     for (const t of kp) {
-      const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0;
-      const bar = t.complete ? '✅' : `${t.done}/${t.total} (${pct}%)`;
-      lines.push(`  • ${t.track}: ${bar}`);
+      if (!byPlatform[t.platform]) byPlatform[t.platform] = [];
+      byPlatform[t.platform].push(t);
+    }
+    for (const [platform, tracks] of Object.entries(byPlatform)) {
+      lines.push(`  ${platform.charAt(0).toUpperCase() + platform.slice(1)}:`);
+      for (const t of tracks) {
+        const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0;
+        const bar = t.complete ? '✅ done' : `${t.done}/${t.total} keywords (${pct}%)`;
+        lines.push(`    • ${t.track}: ${bar}`);
+      }
     }
   }
 
