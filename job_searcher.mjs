@@ -85,13 +85,31 @@ async function main() {
     ? JSON.parse(readFileSync(resolve(__dir, 'data/search_progress.json'), 'utf8'))
     : null;
   const isFirstRun = loadQueue().length === 0;
+
+  // Dynamic lookback: time since last run × 1.25 buffer (min 4h, max first_run_days)
+  function dynamicLookbackDays() {
+    const lastRunPath = resolve(__dir, 'data/searcher_last_run.json');
+    if (!existsSync(lastRunPath)) return searchConfig.posted_within_days || 2;
+    const lastRun = JSON.parse(readFileSync(lastRunPath, 'utf8'));
+    const lastRanAt = lastRun.started_at || lastRun.finished_at;
+    if (!lastRanAt) return searchConfig.posted_within_days || 2;
+    const hoursSince = (Date.now() - new Date(lastRanAt).getTime()) / (1000 * 60 * 60);
+    const buffered = hoursSince * 1.25;
+    const minHours = 4;
+    const maxDays = searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
+    return Math.min(Math.max(buffered / 24, minHours / 24), maxDays);
+  }
+
   const lookbackDays = savedProgress?.lookback_days
-    || (isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : (searchConfig.posted_within_days || 2));
+    || (isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : dynamicLookbackDays());
 
   if (savedProgress?.lookback_days) {
-    console.log(`🔁 Resuming ${lookbackDays}-day search run\n`);
+    console.log(`🔁 Resuming ${lookbackDays.toFixed(2)}-day search run\n`);
   } else if (isFirstRun) {
     console.log(`📅 First run — looking back ${lookbackDays} days\n`);
+  } else {
+    const hours = (lookbackDays * 24).toFixed(1);
+    console.log(`⏱️  Dynamic lookback: ${hours}h (time since last run × 1.25)\n`);
   }
 
   // Init progress tracking — enables resume on restart
