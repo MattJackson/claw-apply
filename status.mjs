@@ -166,7 +166,7 @@ function formatReport(s) {
       ? `⚠️  Last run interrupted ${timeAgo(sr.last_run?.started_at)} (partial results saved)`
       : `⏸️  Last ran ${timeAgo(sr.last_run?.finished_at)}`;
   const lastRunDetail = sr.last_run && !sr.running
-    ? `  Found ${sr.last_run.added} new jobs (${sr.last_run.seen} seen, ${sr.last_run.skipped_dupes || 0} dupes)`
+    ? `→ Found ${sr.last_run.added} new jobs (${sr.last_run.seen} seen, ${sr.last_run.skipped_dupes || 0} dupes)`
     : null;
 
   // Applier section
@@ -175,7 +175,7 @@ function formatReport(s) {
     ? `🔄 Running now`
     : `⏸️  Last ran ${timeAgo(ar.last_run?.finished_at)}`;
   const lastApplierDetail = ar.last_run && !ar.running
-    ? `  Applied ${ar.last_run.submitted} jobs in that run`
+    ? `→ Applied ${ar.last_run.submitted} jobs in that run`
     : null;
 
   const lines = [
@@ -194,11 +194,11 @@ function formatReport(s) {
       byPlatform[t.platform].push(t);
     }
     for (const [platform, tracks] of Object.entries(byPlatform)) {
-      lines.push(`  ${platform.charAt(0).toUpperCase() + platform.slice(1)}:`);
+      lines.push(`${platform.charAt(0).toUpperCase() + platform.slice(1)}:`);
       for (const t of tracks) {
         const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0;
         const bar = t.complete ? '✅ done' : `${t.done}/${t.total} keywords (${pct}%)`;
-        lines.push(`    • ${t.track}: ${bar}`);
+        lines.push(`• ${t.track}: ${bar}`);
       }
     }
   }
@@ -237,14 +237,14 @@ function formatReport(s) {
     [q.skipped_external, 'External ATS'],
   ];
   for (const [count, label] of queueLines) {
-    if (count > 0) lines.push(`  ${label}: ${count}`);
+    if (count > 0) lines.push(`• ${label}: ${count}`);
   }
 
   // Ready-to-apply breakdown by type
   if (s.apply_type_breakdown && Object.keys(s.apply_type_breakdown).length > 0) {
     const sorted = Object.entries(s.apply_type_breakdown).sort((a, b) => b[1] - a[1]);
     const parts = sorted.map(([type, count]) => `${type} ${count}`);
-    lines.push(`  Breakdown: ${parts.join(', ')}`);
+    lines.push(`• Breakdown: ${parts.join(', ')}`);
   }
 
   // Last applied
