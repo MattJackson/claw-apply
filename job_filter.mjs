@@ -133,6 +133,21 @@ async function collect(state, settings) {
 
   clearState();
 
+  // Append to filter run history
+  const runsPath = resolve(__dir, 'data/filter_runs.json');
+  const runs = existsSync(runsPath) ? JSON.parse(readFileSync(runsPath, 'utf8')) : [];
+  runs.push({
+    batch_id: state.batch_id,
+    submitted_at: state.submitted_at,
+    collected_at: new Date().toISOString(),
+    job_count: state.job_count,
+    model: state.model,
+    passed,
+    filtered,
+    errors,
+  });
+  writeFileSync(runsPath, JSON.stringify(runs, null, 2));
+
   const summary = `✅ Filter complete — ${passed} passed, ${filtered} filtered, ${errors} errors`;
   console.log(`\n${summary}`);
 
@@ -182,11 +197,13 @@ async function submit(settings, searchConfig, candidateProfile) {
 
   const batchId = await submitBatch(filterable, jobProfilesByTrack, searchConfig, candidateProfile, model, apiKey);
 
+  const submittedAt = new Date().toISOString();
   writeState({
     batch_id: batchId,
-    submitted_at: new Date().toISOString(),
+    submitted_at: submittedAt,
     job_count: filterable.length,
     model,
+    tracks: Object.keys(jobProfilesByTrack),
   });
 
   console.log(`  Batch submitted: ${batchId}`);

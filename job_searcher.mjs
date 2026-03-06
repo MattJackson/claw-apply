@@ -34,7 +34,7 @@ async function main() {
   const startedAt = Date.now();
 
   const writeLastRun = (finished = false) => {
-    writeFileSync(resolve(__dir, 'data/searcher_last_run.json'), JSON.stringify({
+    const entry = {
       started_at: startedAt,
       finished_at: finished ? Date.now() : null,
       finished,
@@ -42,7 +42,19 @@ async function main() {
       seen: totalSeen,
       skipped_dupes: totalSeen - totalAdded,
       platforms: platformsRun,
-    }, null, 2));
+    };
+    // Always update last-run snapshot
+    writeFileSync(resolve(__dir, 'data/searcher_last_run.json'), JSON.stringify(entry, null, 2));
+    // Append to run history log
+    const runsPath = resolve(__dir, 'data/search_runs.json');
+    const runs = existsSync(runsPath) ? JSON.parse(readFileSync(runsPath, 'utf8')) : [];
+    // Update last entry if same run, otherwise append
+    if (runs.length > 0 && runs[runs.length - 1].started_at === startedAt) {
+      runs[runs.length - 1] = entry;
+    } else {
+      runs.push(entry);
+    }
+    writeFileSync(runsPath, JSON.stringify(runs, null, 2));
   };
 
   lock.onShutdown(() => {
@@ -195,6 +207,11 @@ async function main() {
   if (totalAdded > 0) await sendTelegram(settings, summary);
 
   writeLastRun(true);
+  // Archive final progress snapshot before clearing (for audit — answers "what was searched?")
+  const progressPath = resolve(__dir, 'data/search_progress.json');
+  if (existsSync(progressPath)) {
+    writeFileSync(resolve(__dir, 'data/search_progress_last.json'), readFileSync(progressPath, 'utf8'));
+  }
   clearProgress(); // run finished cleanly — next run starts fresh with new keywords
 
   console.log('\n✅ Search complete');
