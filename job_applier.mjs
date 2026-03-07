@@ -34,8 +34,7 @@ import {
 } from './lib/constants.mjs';
 
 const DEFAULT_ENABLED_APPLY_TYPES = [
-  'easy_apply', 'wellfound',
-  'ashby', 'unknown_external',
+  'easy_apply', 'wellfound', 'ashby',
 ];
 
 const isPreview = process.argv.includes('--preview');
