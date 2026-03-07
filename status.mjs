@@ -267,10 +267,9 @@ if (jsonMode) {
 } else {
   const report = formatReport(status);
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-  // Send via Telegram directly if configured (so markdown renders)
   if (settings.notifications?.bot_token && settings.notifications?.telegram_user_id) {
     await sendTelegram(settings, report);
-    // Don't also print to stdout — OpenClaw would relay it as a duplicate plain-text message
+    console.log('Status sent to Telegram.');
   } else {
     console.log(report);
   }
