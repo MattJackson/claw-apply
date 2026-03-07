@@ -162,10 +162,13 @@ async function main() {
   const liSearches = searchConfig.searches.filter(s => s.platforms?.includes('linkedin'));
   const wfSearches = searchConfig.searches.filter(s => s.platforms?.includes('wellfound'));
 
+  const MAX_PLATFORM_RETRIES = 3;
+
   // --- LinkedIn ---
   if (liSearches.length > 0) {
-    console.log('🔗 LinkedIn search...');
     let liBrowser;
+    for (let attempt = 1; attempt <= MAX_PLATFORM_RETRIES; attempt++) {
+      console.log(`🔗 LinkedIn search...${attempt > 1 ? ` (attempt ${attempt}/${MAX_PLATFORM_RETRIES})` : ''}`);
     try {
       console.log('  Creating browser...');
       liBrowser = await createBrowser(settings, 'linkedin');
@@ -183,23 +186,39 @@ async function main() {
         if (keywordStart > 0) console.log(`  [${search.name}] resuming from keyword ${keywordStart + 1}/${search.keywords.length}`);
         const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), keywordOffset: keywordStart, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
-        await searchLinkedIn(liBrowser.page, effectiveSearch, {
-          onPage: async (pageJobs) => {
-            const added = await addJobs(pageJobs);
-            totalAdded += added;
-            totalSeen += pageJobs.length;
-            queryFound += pageJobs.length;
-            queryAdded += added;
-            process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
-          },
-          onKeyword: (ki) => {
-            markKeywordComplete('linkedin', search.name, keywordStart + ki);
+        try {
+          await searchLinkedIn(liBrowser.page, effectiveSearch, {
+            onPage: async (pageJobs) => {
+              const added = await addJobs(pageJobs);
+              totalAdded += added;
+              totalSeen += pageJobs.length;
+              queryFound += pageJobs.length;
+              queryAdded += added;
+              process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
+            },
+            onKeyword: (ki) => {
+              markKeywordComplete('linkedin', search.name, keywordStart + ki);
+            }
+          });
+        } catch (searchErr) {
+          console.error(`\n  ⚠️  [${search.name}] search error: ${searchErr.message}`);
+          // Check if browser is still alive
+          const alive = await liBrowser.page.evaluate(() => true).catch(() => false);
+          if (!alive) {
+            console.log('  🔄 Browser died — recreating...');
+            await liBrowser.browser?.close().catch(() => {});
+            liBrowser = await createBrowser(settings, 'linkedin');
+            const relogged = await ensureLoggedIn(liBrowser.page, liLogin, 'linkedin', settings.kernel_api_key || process.env.KERNEL_API_KEY);
+            if (!relogged) { console.error('  ❌ Could not re-login after browser crash'); break; }
+            console.log('  ✅ Browser recovered');
           }
-        });
+        }
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
         markComplete('linkedin', search.name, { found: queryFound, added: queryAdded });
         const tc = trackCounts[search.name] || (trackCounts[search.name] = { found: 0, added: 0 });
         tc.found += queryFound; tc.added += queryAdded;
+        // Save progress after each search track
+        writeLastRun(false);
       }
 
       platformsRun.push('LinkedIn');
@@ -208,23 +227,36 @@ async function main() {
       const unclassified = getJobsByStatus('new').filter(j => j.apply_type === 'unknown_external' && !j.apply_url);
       if (unclassified.length > 0) {
         console.log(`\n🔍 Classifying ${unclassified.length} external jobs...`);
-        const { classified, remaining } = await classifyExternalJobs(liBrowser.page, unclassified, (job, applyType, applyUrl) => {
-          await updateJobStatus(job.id, 'new', { apply_type: applyType, apply_url: applyUrl });
-        });
-        console.log(`  ✅ Classified ${classified}, ${remaining} still unknown`);
+        try {
+          const { classified, remaining } = await classifyExternalJobs(liBrowser.page, unclassified, async (job, applyType, applyUrl) => {
+            await updateJobStatus(job.id, 'new', { apply_type: applyType, apply_url: applyUrl });
+          });
+          console.log(`  ✅ Classified ${classified}, ${remaining} still unknown`);
+        } catch (classErr) {
+          console.error(`  ⚠️  Classification error: ${classErr.message}`);
+        }
       }
     } catch (e) {
       console.error(`  ❌ LinkedIn error: ${e.message}`);
       if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
+      if (attempt < MAX_PLATFORM_RETRIES) {
+        const waitMin = attempt * 5;
+        console.log(`  ⏳ Retrying in ${waitMin} minutes...`);
+        await new Promise(r => setTimeout(r, waitMin * 60 * 1000));
+        continue;
+      }
     } finally {
       await liBrowser?.browser?.close().catch(() => {});
+    }
+    break; // success or max retries — exit retry loop
     }
   }
 
   // --- Wellfound ---
   if (wfSearches.length > 0) {
-    console.log('\n🌐 Wellfound search...');
     let wfBrowser;
+    for (let attempt = 1; attempt <= MAX_PLATFORM_RETRIES; attempt++) {
+      console.log(`\n🌐 Wellfound search...${attempt > 1 ? ` (attempt ${attempt}/${MAX_PLATFORM_RETRIES})` : ''}`);
     try {
       console.log('  Creating browser...');
       wfBrowser = await createBrowser(settings, 'wellfound');
@@ -240,28 +272,50 @@ async function main() {
         }
         const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
-        await searchWellfound(wfBrowser.page, effectiveSearch, {
-          onPage: async (pageJobs) => {
-            const added = await addJobs(pageJobs);
-            totalAdded += added;
-            totalSeen += pageJobs.length;
-            queryFound += pageJobs.length;
-            queryAdded += added;
-            process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
+        try {
+          await searchWellfound(wfBrowser.page, effectiveSearch, {
+            onPage: async (pageJobs) => {
+              const added = await addJobs(pageJobs);
+              totalAdded += added;
+              totalSeen += pageJobs.length;
+              queryFound += pageJobs.length;
+              queryAdded += added;
+              process.stdout.write(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new...`);
+            }
+          });
+        } catch (searchErr) {
+          console.error(`\n  ⚠️  [${search.name}] search error: ${searchErr.message}`);
+          const alive = await wfBrowser.page.evaluate(() => true).catch(() => false);
+          if (!alive) {
+            console.log('  🔄 Browser died — recreating...');
+            await wfBrowser.browser?.close().catch(() => {});
+            wfBrowser = await createBrowser(settings, 'wellfound');
+            const relogged = await ensureLoggedIn(wfBrowser.page, wfLogin, 'wellfound', settings.kernel_api_key || process.env.KERNEL_API_KEY);
+            if (!relogged) { console.warn('  ⚠️ Could not re-login after browser crash'); break; }
+            console.log('  ✅ Browser recovered');
           }
-        });
+        }
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
         markComplete('wellfound', search.name, { found: queryFound, added: queryAdded });
         const tc = trackCounts[search.name] || (trackCounts[search.name] = { found: 0, added: 0 });
         tc.found += queryFound; tc.added += queryAdded;
+        writeLastRun(false);
       }
 
       platformsRun.push('Wellfound');
     } catch (e) {
       console.error(`  ❌ Wellfound error: ${e.message}`);
       if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
+      if (attempt < MAX_PLATFORM_RETRIES) {
+        const waitMin = attempt * 5;
+        console.log(`  ⏳ Retrying in ${waitMin} minutes...`);
+        await new Promise(r => setTimeout(r, waitMin * 60 * 1000));
+        continue;
+      }
     } finally {
       await wfBrowser?.browser?.close().catch(() => {});
+    }
+    break;
     }
   }
 
@@ -281,6 +335,12 @@ async function main() {
   console.log(`\n✅ Search complete at ${new Date().toISOString()}`);
   return { added: totalAdded, seen: totalSeen };
 }
+
+// Catch unhandled rejections so the process doesn't silently die during a 12hr run
+process.on('unhandledRejection', (err) => {
+  console.error('⚠️  Unhandled rejection:', err?.message || err);
+  if (err?.stack) console.error(err.stack);
+});
 
 main().then(() => {
   process.exit(0);
