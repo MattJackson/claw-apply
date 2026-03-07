@@ -227,7 +227,6 @@ function formatReport(s) {
   lines.push('', `📋 *Queue* — ${unique} unique jobs (${q.duplicate || 0} dupes)`);
 
   const queueLines = [
-    [q.new, 'Ready to apply'],
     [q.applied, 'Applied'],
     [q.filtered || 0, 'AI filtered'],
     [q.closed || 0, 'Closed'],
@@ -237,15 +236,35 @@ function formatReport(s) {
     [q.skipped_recruiter, 'Recruiter-only'],
     [q.skipped_external, 'External ATS'],
   ];
-  for (const [count, label] of queueLines) {
-    if (count > 0) lines.push(`• ${label}: ${count}`);
+
+  // Ready to apply with per-type breakdown
+  if (q.new > 0) {
+    const atb = s.apply_type_breakdown || {};
+    const sorted = Object.entries(atb).sort((a, b) => b[1] - a[1]);
+    const typeNames = {
+      easy_apply: 'Easy Apply',
+      wellfound: 'Wellfound',
+      greenhouse: 'Greenhouse',
+      lever: 'Lever',
+      workday: 'Workday',
+      ashby: 'Ashby',
+      jobvite: 'Jobvite',
+      rippling: 'Rippling',
+      unknown_external: 'Unknown External',
+      unknown: 'Unknown',
+    };
+    if (sorted.length > 0) {
+      lines.push(`• Ready to apply: ${q.new}`);
+      for (const [type, count] of sorted) {
+        lines.push(`  → ${typeNames[type] || type}: ${count}`);
+      }
+    } else {
+      lines.push(`• Ready to apply: ${q.new}`);
+    }
   }
 
-  // Ready-to-apply breakdown by type
-  if (s.apply_type_breakdown && Object.keys(s.apply_type_breakdown).length > 0) {
-    const sorted = Object.entries(s.apply_type_breakdown).sort((a, b) => b[1] - a[1]);
-    const parts = sorted.map(([type, count]) => `${type} ${count}`);
-    lines.push(`• Breakdown: ${parts.join(', ')}`);
+  for (const [count, label] of queueLines) {
+    if (count > 0) lines.push(`• ${label}: ${count}`);
   }
 
   // Last applied
