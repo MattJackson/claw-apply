@@ -33,7 +33,11 @@ import {
   APPLY_RUN_TIMEOUT_MS, PER_JOB_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS
 } from './lib/constants.mjs';
 
-const DEFAULT_ENABLED_APPLY_TYPES = ['easy_apply', 'wellfound'];
+const DEFAULT_ENABLED_APPLY_TYPES = [
+  'easy_apply', 'wellfound',
+  'greenhouse', 'lever', 'ashby', 'workday', 'jobvite',
+  'unknown_external',
+];
 
 const isPreview = process.argv.includes('--preview');
 
@@ -387,7 +391,9 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       break;
 
     case 'skipped_honeypot':
-      console.log(`    ⏭️  Skipped — honeypot`);
+    case 'skipped_login_required':
+    case 'skipped_captcha':
+      console.log(`    ⏭️  Skipped — ${status.replace('skipped_', '')}`);
       updateJobStatus(job.id, status, { title, company });
       appendLog({ ...job, title, company, status });
       results.skipped_other++;
