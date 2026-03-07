@@ -19,7 +19,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied, initQueueFromS3 } from './lib/queue.mjs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { ensureAuth } from './lib/session.mjs';
@@ -43,6 +43,7 @@ async function main() {
   const lock = acquireLock('applier', resolve(__dir, 'data'));
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  await initQueueFromS3(settings);
   const profile = loadConfig(resolve(__dir, 'config/profile.json'));
   const answersPath = resolve(__dir, 'config/answers.json');
   const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];

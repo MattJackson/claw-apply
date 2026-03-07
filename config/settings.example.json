@@ -25,5 +25,11 @@
   "browser": {
     "provider": "kernel",
     "playwright_path": null
+  },
+  "storage": {
+    "type": "local",
+    "_note": "Set type to 's3' for S3-backed storage. Requires @aws-sdk/client-s3 and IAM permissions.",
+    "bucket": "claw-apply-data",
+    "region": "us-west-2"
   }
 }

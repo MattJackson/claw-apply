@@ -30,7 +30,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter, initQueueFromS3 } from './lib/queue.mjs';
 import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
 import { sendTelegram, formatFilterSummary } from './lib/notify.mjs';
 import { DEFAULT_FILTER_MODEL, DEFAULT_FILTER_MIN_SCORE } from './lib/constants.mjs';
@@ -305,6 +305,7 @@ async function main() {
   }
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  await initQueueFromS3(settings);
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
   const candidateProfile = loadConfig(resolve(__dir, 'config/profile.json'));
 

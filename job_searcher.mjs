@@ -20,7 +20,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { addJobs, loadQueue, loadConfig, getJobsByStatus, updateJobStatus } from './lib/queue.mjs';
+import { addJobs, loadQueue, loadConfig, getJobsByStatus, updateJobStatus, initQueueFromS3 } from './lib/queue.mjs';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
@@ -60,6 +60,7 @@ async function main() {
   const startedAt = Date.now();
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  await initQueueFromS3(settings);
 
   const writeLastRun = (finished = false) => {
     const entry = {
