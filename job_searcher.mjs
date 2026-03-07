@@ -96,10 +96,10 @@ async function main() {
   });
 
   // Load config
-  const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
+  const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
 
   // First run detection: if queue is empty, use first_run_days lookback
-  const profile = loadConfig(resolve(__dir, 'config/profile.json'));
+  const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
   const anthropicKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
 
   // Determine lookback: check for an in-progress run first, then fall back to first-run/normal logic

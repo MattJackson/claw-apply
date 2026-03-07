@@ -45,7 +45,7 @@ async function main() {
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
-  const profile = loadConfig(resolve(__dir, 'config/profile.json'));
+  const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
 
   // Ensure resume is available locally (downloads from S3 if needed)
   if (profile.resume_path) {
@@ -53,7 +53,7 @@ async function main() {
   }
 
   const answersPath = resolve(__dir, 'config/answers.json');
-  const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];
+  const answers = await loadConfig(answersPath).catch(() => []);
   const maxApps = settings.max_applications_per_run || Infinity;
   const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
   const enabledTypes = settings.enabled_apply_types || DEFAULT_ENABLED_APPLY_TYPES;
@@ -218,7 +218,7 @@ async function main() {
 
         // Reload answers.json before each job — picks up Telegram replies between jobs
         try {
-          const freshAnswers = existsSync(answersPath) ? loadConfig(answersPath) : [];
+          const freshAnswers = await loadConfig(answersPath).catch(() => []);
           formFiller.answers = freshAnswers;
         } catch { /* keep existing answers on read error */ }
 

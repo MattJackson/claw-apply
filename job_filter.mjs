@@ -131,7 +131,7 @@ async function collect(state, settings) {
     for (const [k, v] of Object.entries(usage)) totalUsage[k] = (totalUsage[k] || 0) + v;
   }
 
-  const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
+  const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
   const globalMin = searchConfig.filter_min_score ?? DEFAULT_FILTER_MIN_SCORE;
 
   let passed = 0, filtered = 0, errors = 0;
@@ -306,8 +306,8 @@ async function main() {
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
-  const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
-  const candidateProfile = loadConfig(resolve(__dir, 'config/profile.json'));
+  const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
+  const candidateProfile = await loadConfig(resolve(__dir, 'config/profile.json'));
 
   console.log('🔍 claw-apply: AI Job Filter\n');
 
