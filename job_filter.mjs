@@ -304,7 +304,7 @@ async function main() {
     process.exit(1);
   }
 
-  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
   const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
   const candidateProfile = await loadConfig(resolve(__dir, 'config/profile.json'));

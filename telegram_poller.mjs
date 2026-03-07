@@ -22,7 +22,7 @@ const origStdoutWrite = process.stdout.write.bind(process.stdout);
 const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
-const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
 await initQueue(settings);
 const answersPath = resolve(__dir, 'config/answers.json');
 

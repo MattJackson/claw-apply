@@ -59,7 +59,7 @@ async function main() {
   const trackCounts = {}; // { trackName: { found, added } }
   const startedAt = Date.now();
 
-  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
 
   const writeLastRun = (finished = false) => {

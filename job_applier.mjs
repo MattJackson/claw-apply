@@ -43,7 +43,7 @@ const isPreview = process.argv.includes('--preview');
 async function main() {
   const lock = acquireLock('applier', resolve(__dir, 'data'));
 
-  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+  const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
   const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
 
