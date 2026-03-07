@@ -204,7 +204,7 @@ async function main() {
       platformsRun.push('LinkedIn');
 
       // Classify unknown_external jobs using the existing LinkedIn browser session
-      const unclassified = getJobsByStatus('new').filter(j => j.apply_type === 'unknown_external');
+      const unclassified = getJobsByStatus('new').filter(j => j.apply_type === 'unknown_external' && !j.apply_url);
       if (unclassified.length > 0) {
         console.log(`\n🔍 Classifying ${unclassified.length} external jobs...`);
         const { classified, remaining } = await classifyExternalJobs(liBrowser.page, unclassified, (job, applyType, applyUrl) => {
