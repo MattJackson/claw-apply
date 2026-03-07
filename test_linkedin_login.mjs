@@ -5,7 +5,7 @@ import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
 
 let browser;
 try {

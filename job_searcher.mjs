@@ -183,7 +183,7 @@ async function main() {
       console.log('  Creating browser...');
       liBrowser = await createBrowser(settings, 'linkedin');
       console.log('  Browser connected, verifying login...');
-      const loggedIn = await ensureLoggedIn(liBrowser.page, liLogin, 'linkedin', settings.kernel_api_key || process.env.KERNEL_API_KEY, settings.kernel?.connection_ids || {});
+      const loggedIn = await ensureLoggedIn(liBrowser.page, liLogin, 'linkedin', settings.kernel_api_key || process.env.KERNEL_API_KEY);
       if (!loggedIn) throw new Error('LinkedIn not logged in');
       console.log('  ✅ Logged in');
 
@@ -271,7 +271,7 @@ async function main() {
       console.log('  Creating browser...');
       wfBrowser = await createBrowser(settings, 'wellfound');
       console.log('  Browser connected, verifying login...');
-      const loggedIn = await ensureLoggedIn(wfBrowser.page, wfLogin, 'wellfound', settings.kernel_api_key || process.env.KERNEL_API_KEY, settings.kernel?.connection_ids || {});
+      const loggedIn = await ensureLoggedIn(wfBrowser.page, wfLogin, 'wellfound', settings.kernel_api_key || process.env.KERNEL_API_KEY);
       if (!loggedIn) console.warn('  ⚠️ Wellfound login unconfirmed, proceeding');
       else console.log('  ✅ Logged in');
 
