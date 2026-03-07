@@ -31,7 +31,7 @@ process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return orig
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
 import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter, initQueue } from './lib/queue.mjs';
-import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
+import { submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
 import { sendTelegram, formatFilterSummary } from './lib/notify.mjs';
 import { DEFAULT_FILTER_MODEL, DEFAULT_FILTER_MIN_SCORE } from './lib/constants.mjs';
 
@@ -234,31 +234,28 @@ async function submit(settings, searchConfig, candidateProfile) {
     return;
   }
 
-  // Build job profiles map by track
-  const profilePaths = settings.filter?.job_profiles || {};
-  const jobProfilesByTrack = {};
-  for (const [track, path] of Object.entries(profilePaths)) {
-    const profile = await loadProfile(path);
-    if (profile) jobProfilesByTrack[track] = profile;
-    else console.warn(`⚠️  Could not load job profile for track "${track}" at ${path}`);
+  // Build search tracks map from search config
+  const searchesByTrack = {};
+  for (const search of searchConfig.searches) {
+    searchesByTrack[search.track] = search;
   }
 
-  // Filter out jobs with no profile (will pass through unscored)
-  const filterable = jobs.filter(j => jobProfilesByTrack[j.track || 'ae']);
-  const noProfile = jobs.length - filterable.length;
+  // Filter out jobs with no matching search track
+  const filterable = jobs.filter(j => searchesByTrack[j.track || 'ae']);
+  const noTrack = jobs.length - filterable.length;
 
-  if (noProfile > 0) console.warn(`⚠️  ${noProfile} jobs skipped — no profile for their track`);
+  if (noTrack > 0) console.warn(`⚠️  ${noTrack} jobs skipped — no search track configured`);
 
   if (filterable.length === 0) {
-    console.log('Nothing filterable — no job profiles configured for any track.');
+    console.log('Nothing filterable — no matching search tracks.');
     return;
   }
 
   const model = settings.filter?.model || DEFAULT_FILTER_MODEL;
   const submittedAt = new Date().toISOString();
-  console.log(`🚀 Submitting batches — ${filterable.length} jobs across ${Object.keys(jobProfilesByTrack).length} tracks, model: ${model}`);
+  console.log(`🚀 Submitting batches — ${filterable.length} jobs across ${Object.keys(searchesByTrack).length} tracks, model: ${model}`);
 
-  const submitted = await submitBatches(filterable, jobProfilesByTrack, candidateProfile, model, apiKey);
+  const submitted = await submitBatches(filterable, searchesByTrack, candidateProfile, model, apiKey);
 
   writeState({
     batches: submitted,
