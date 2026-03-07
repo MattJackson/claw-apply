@@ -30,7 +30,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter, initQueueFromS3 } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter, initQueue } from './lib/queue.mjs';
 import { loadProfile, submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
 import { sendTelegram, formatFilterSummary } from './lib/notify.mjs';
 import { DEFAULT_FILTER_MODEL, DEFAULT_FILTER_MIN_SCORE } from './lib/constants.mjs';
@@ -163,10 +163,10 @@ async function collect(state, settings) {
     else { filtered++; job.status = 'filtered'; }
   }
 
-  saveQueue(queue);
+  await saveQueue(queue);
 
   // Dedup cross-track copies — keep highest-scoring version of each job
-  const duped = dedupeAfterFilter();
+  const duped = await dedupeAfterFilter();
   if (duped > 0) console.log(`  Deduped ${duped} cross-track copies`);
 
   clearState();
@@ -221,7 +221,7 @@ async function submit(settings, searchConfig, candidateProfile) {
       }
     }
     if (cleared > 0) {
-      saveQueue(queue);
+      await saveQueue(queue);
       console.log(`🔄 Cleared ${cleared} stale batch markers (batch completed without scoring)`);
     }
   }
@@ -279,7 +279,7 @@ async function submit(settings, searchConfig, candidateProfile) {
       job.filter_submitted_at = submittedAt;
     }
   }
-  saveQueue(allJobs);
+  await saveQueue(allJobs);
 
   const batchSummary = submitted.map(b => `${b.track}: ${b.jobCount} jobs`).join(', ');
   console.log(`  ${batchSummary}`);
@@ -305,7 +305,7 @@ async function main() {
   }
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-  await initQueueFromS3(settings);
+  await initQueue(settings);
   const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
   const candidateProfile = loadConfig(resolve(__dir, 'config/profile.json'));
 

@@ -19,7 +19,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied, initQueueFromS3 } from './lib/queue.mjs';
+import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied, initQueue } from './lib/queue.mjs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { ensureAuth } from './lib/session.mjs';
@@ -43,7 +43,7 @@ async function main() {
   const lock = acquireLock('applier', resolve(__dir, 'data'));
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-  await initQueueFromS3(settings);
+  await initQueue(settings);
   const profile = loadConfig(resolve(__dir, 'config/profile.json'));
   const answersPath = resolve(__dir, 'config/answers.json');
   const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];
@@ -180,7 +180,7 @@ async function main() {
           console.error(`  ❌ ${platform} auth failed: ${authResult.reason}`);
           await sendTelegram(settings, `⚠️ *${platform}* auth failed — ${authResult.reason}`).catch(() => {});
           for (const job of platformJobs) {
-            updateJobStatus(job.id, 'new', { retry_reason: 'auth_failed' });
+            await updateJobStatus(job.id, 'new', { retry_reason: 'auth_failed' });
           }
           continue;
         }
@@ -190,9 +190,9 @@ async function main() {
       }
 
       for (const job of platformJobs) {
-        if (isAlreadyApplied(job.id)) {
+        if (await isAlreadyApplied(job.id)) {
           console.log(`  ⏭️  Already applied — ${job.title} @ ${job.company || '?'}`);
-          updateJobStatus(job.id, 'already_applied', {});
+          await updateJobStatus(job.id, 'already_applied', {});
           results.already_applied++;
           continue;
         }
@@ -261,10 +261,10 @@ async function main() {
 
           const retries = (job.retry_count || 0) + 1;
           if (retries <= maxRetries) {
-            updateJobStatus(job.id, 'new', { retry_count: retries });
+            await updateJobStatus(job.id, 'new', { retry_count: retries });
           } else {
-            updateJobStatus(job.id, 'failed', { error: e.message });
-            appendLog({ ...job, status: 'failed', error: e.message });
+            await updateJobStatus(job.id, 'failed', { error: e.message });
+            await appendLog({ ...job, status: 'failed', error: e.message });
             results.failed++;
           }
         }
@@ -311,8 +311,8 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
   switch (status) {
     case 'submitted':
       console.log(`    ✅ Applied!${applyDuration ? ` (${applyDuration}s)` : ''}`);
-      updateJobStatus(job.id, 'applied', { title, company, applied_at: Date.now(), apply_started_at: applyStartedAt });
-      appendLog({ ...job, title, company, status: 'applied', applied_at: Date.now(), apply_started_at: applyStartedAt });
+      await updateJobStatus(job.id, 'applied', { title, company, applied_at: Date.now(), apply_started_at: applyStartedAt });
+      await appendLog({ ...job, title, company, status: 'applied', applied_at: Date.now(), apply_started_at: applyStartedAt });
       results.submitted++;
       break;
 
@@ -339,12 +339,12 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
       const telegramMsgId = await sendTelegram(settings, msg);
 
-      updateJobStatus(job.id, 'needs_answer', {
+      await updateJobStatus(job.id, 'needs_answer', {
         title, company, pending_question,
         ai_suggested_answer: aiAnswer || null,
         telegram_message_id: telegramMsgId,
       });
-      appendLog({ ...job, title, company, status: 'needs_answer', pending_question, ai_suggested_answer: aiAnswer });
+      await appendLog({ ...job, title, company, status: 'needs_answer', pending_question, ai_suggested_answer: aiAnswer });
       results.needs_answer++;
       console.log(`    ⏸️  Question sent to Telegram. Job will retry after you reply.`);
       break;
@@ -352,16 +352,16 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
     case 'skipped_recruiter_only':
       console.log(`    🚫 Recruiter-only`);
-      updateJobStatus(job.id, 'skipped_recruiter_only', { title, company });
-      appendLog({ ...job, title, company, status: 'skipped_recruiter_only' });
+      await updateJobStatus(job.id, 'skipped_recruiter_only', { title, company });
+      await appendLog({ ...job, title, company, status: 'skipped_recruiter_only' });
       results.skipped_recruiter++;
       break;
 
     case 'skipped_external_unsupported': {
       const platform = ats_platform || job.apply_type || 'unknown';
       console.log(`    ⏭️  External ATS: ${platform}`);
-      updateJobStatus(job.id, 'skipped_external_unsupported', { title, company, ats_url: externalUrl, ats_platform: platform });
-      appendLog({ ...job, title, company, status: 'skipped_external_unsupported', ats_url: externalUrl, ats_platform: platform });
+      await updateJobStatus(job.id, 'skipped_external_unsupported', { title, company, ats_url: externalUrl, ats_platform: platform });
+      await appendLog({ ...job, title, company, status: 'skipped_external_unsupported', ats_url: externalUrl, ats_platform: platform });
       results.skipped_external++;
       results.atsCounts[platform] = (results.atsCounts[platform] || 0) + 1;
       break;
@@ -369,14 +369,14 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
     case 'rate_limited':
       console.log(`    ⚠️  LinkedIn Easy Apply daily limit reached — stopping run`);
-      updateJobStatus(job.id, 'new', { title, company, retry_reason: 'rate_limited' });
+      await updateJobStatus(job.id, 'new', { title, company, retry_reason: 'rate_limited' });
       results.rate_limited = true;
       break;
 
     case 'closed':
       console.log(`    🚫 Closed — no longer accepting applications`);
-      updateJobStatus(job.id, 'closed', { title, company });
-      appendLog({ ...job, title, company, status: 'closed' });
+      await updateJobStatus(job.id, 'closed', { title, company });
+      await appendLog({ ...job, title, company, status: 'closed' });
       results.closed = (results.closed || 0) + 1;
       break;
 
@@ -384,8 +384,8 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
     case 'skipped_no_apply':
     case 'skipped_easy_apply_unsupported':
       console.log(`    ⏭️  Skipped — ${status}`);
-      updateJobStatus(job.id, status, { title, company });
-      appendLog({ ...job, title, company, status });
+      await updateJobStatus(job.id, status, { title, company });
+      await appendLog({ ...job, title, company, status });
       results.skipped_no_apply++;
       break;
 
@@ -393,8 +393,8 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
     case 'skipped_login_required':
     case 'skipped_captcha':
       console.log(`    ⏭️  Skipped — ${status.replace('skipped_', '')}`);
-      updateJobStatus(job.id, status, { title, company });
-      appendLog({ ...job, title, company, status });
+      await updateJobStatus(job.id, status, { title, company });
+      await appendLog({ ...job, title, company, status });
       results.skipped_other++;
       break;
 
@@ -407,11 +407,11 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       const maxRetry = settings.max_retries ?? DEFAULT_MAX_RETRIES;
       if (retries <= maxRetry) {
         console.log(`    ⏭️  ${status} — will retry (attempt ${retries}/${maxRetry})`);
-        updateJobStatus(job.id, 'new', { title, company, retry_count: retries });
+        await updateJobStatus(job.id, 'new', { title, company, retry_count: retries });
       } else {
         console.log(`    ⏭️  ${status} — max retries reached`);
-        updateJobStatus(job.id, status, { title, company });
-        appendLog({ ...job, title, company, status });
+        await updateJobStatus(job.id, status, { title, company });
+        await appendLog({ ...job, title, company, status });
       }
       results.skipped_other++;
       break;
@@ -419,8 +419,8 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
     default:
       console.warn(`    ⚠️  Unhandled status: ${status}`);
-      updateJobStatus(job.id, status, { title, company });
-      appendLog({ ...job, title, company, status });
+      await updateJobStatus(job.id, status, { title, company });
+      await appendLog({ ...job, title, company, status });
       results.skipped_other++;
   }
 }

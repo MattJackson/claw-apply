@@ -20,7 +20,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { addJobs, loadQueue, loadConfig, getJobsByStatus, updateJobStatus, initQueueFromS3 } from './lib/queue.mjs';
+import { addJobs, loadQueue, loadConfig, getJobsByStatus, updateJobStatus, initQueue } from './lib/queue.mjs';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
@@ -60,7 +60,7 @@ async function main() {
   const startedAt = Date.now();
 
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-  await initQueueFromS3(settings);
+  await initQueue(settings);
 
   const writeLastRun = (finished = false) => {
     const entry = {
@@ -184,8 +184,8 @@ async function main() {
         const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), keywordOffset: keywordStart, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
         await searchLinkedIn(liBrowser.page, effectiveSearch, {
-          onPage: (pageJobs) => {
-            const added = addJobs(pageJobs);
+          onPage: async (pageJobs) => {
+            const added = await addJobs(pageJobs);
             totalAdded += added;
             totalSeen += pageJobs.length;
             queryFound += pageJobs.length;
@@ -209,7 +209,7 @@ async function main() {
       if (unclassified.length > 0) {
         console.log(`\n🔍 Classifying ${unclassified.length} external jobs...`);
         const { classified, remaining } = await classifyExternalJobs(liBrowser.page, unclassified, (job, applyType, applyUrl) => {
-          updateJobStatus(job.id, 'new', { apply_type: applyType, apply_url: applyUrl });
+          await updateJobStatus(job.id, 'new', { apply_type: applyType, apply_url: applyUrl });
         });
         console.log(`  ✅ Classified ${classified}, ${remaining} still unknown`);
       }
@@ -241,8 +241,8 @@ async function main() {
         const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } };
         let queryFound = 0, queryAdded = 0;
         await searchWellfound(wfBrowser.page, effectiveSearch, {
-          onPage: (pageJobs) => {
-            const added = addJobs(pageJobs);
+          onPage: async (pageJobs) => {
+            const added = await addJobs(pageJobs);
             totalAdded += added;
             totalSeen += pageJobs.length;
             queryFound += pageJobs.length;
