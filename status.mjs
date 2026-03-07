@@ -3,6 +3,7 @@
  * status.mjs — claw-apply status report
  * Outputs structured JSON for agent formatting
  * Run: node status.mjs [--json]
+ * Sends formatted status to Telegram if configured, and prints to stdout.
  */
 import { readFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -259,17 +260,16 @@ function formatReport(s) {
 import { loadConfig } from './lib/queue.mjs';
 import { sendTelegram } from './lib/notify.mjs';
 
-const telegramMode = process.argv.includes('--telegram');
 const status = buildStatus();
 
 if (jsonMode) {
   console.log(JSON.stringify(status, null, 2));
-} else if (telegramMode) {
+} else {
   const report = formatReport(status);
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-  await sendTelegram(settings, report);
-  console.log('Status sent to Telegram');
-} else {
-  // Console output keeps markdown * for agents that relay stdout to Telegram
-  console.log(formatReport(status));
+  // Always send via Telegram directly if configured (so markdown renders)
+  if (settings.notifications?.bot_token && settings.notifications?.telegram_user_id) {
+    await sendTelegram(settings, report);
+  }
+  console.log(report);
 }
