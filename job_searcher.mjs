@@ -224,12 +224,9 @@ async function main() {
       platformsRun.push('LinkedIn');
 
       // Classify unknown_external jobs using the existing LinkedIn browser session
-      // Cap at 50 per run — each one requires a click + redirect wait
-      const MAX_CLASSIFY = 50;
-      const allUnclassified = getJobsByStatus('new').filter(j => j.apply_type === 'unknown_external' && !j.apply_url);
-      const unclassified = allUnclassified.slice(0, MAX_CLASSIFY);
+      const unclassified = getJobsByStatus('new').filter(j => j.apply_type === 'unknown_external' && !j.apply_url);
       if (unclassified.length > 0) {
-        console.log(`\n🔍 Classifying ${unclassified.length}/${allUnclassified.length} external jobs...`);
+        console.log(`\n🔍 Classifying ${unclassified.length} external jobs...`);
         try {
           const { classified, remaining } = await classifyExternalJobs(liBrowser.page, unclassified, async (job, applyType, applyUrl) => {
             await updateJobStatus(job.id, 'new', { apply_type: applyType, apply_url: applyUrl });
