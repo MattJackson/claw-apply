@@ -20,6 +20,7 @@ process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return orig
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
 import { getJobsByStatus, updateJobStatus, appendLog, loadConfig, isAlreadyApplied, initQueue } from './lib/queue.mjs';
+import { ensureLocalFile } from './lib/storage.mjs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { ensureAuth } from './lib/session.mjs';
@@ -45,6 +46,12 @@ async function main() {
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
   const profile = loadConfig(resolve(__dir, 'config/profile.json'));
+
+  // Ensure resume is available locally (downloads from S3 if needed)
+  if (profile.resume_path) {
+    profile.resume_path = await ensureLocalFile('config/Matthew_Jackson_Resume.pdf', profile.resume_path);
+  }
+
   const answersPath = resolve(__dir, 'config/answers.json');
   const answers = existsSync(answersPath) ? loadConfig(answersPath) : [];
   const maxApps = settings.max_applications_per_run || Infinity;
