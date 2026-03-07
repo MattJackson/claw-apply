@@ -201,6 +201,7 @@ async function main() {
           ]);
           result.applyStartedAt = applyStartedAt;
           await handleResult(job, result, results, settings, profile, apiKey);
+          if (results.rate_limited) break;
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);
           if (e.stack) console.error(`    Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
@@ -240,6 +241,10 @@ async function main() {
       if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
     } finally {
       await browser?.browser?.close().catch(() => {});
+    }
+    if (results.rate_limited) {
+      await sendTelegram(settings, `⚠️ *LinkedIn Easy Apply daily limit reached* — stopping all applications until tomorrow.`).catch(() => {});
+      break;
     }
   }
 
@@ -324,6 +329,12 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
       results.atsCounts[platform] = (results.atsCounts[platform] || 0) + 1;
       break;
     }
+
+    case 'rate_limited':
+      console.log(`    ⚠️  LinkedIn Easy Apply daily limit reached — stopping run`);
+      updateJobStatus(job.id, 'new', { title, company, retry_reason: 'rate_limited' });
+      results.rate_limited = true;
+      break;
 
     case 'closed':
       console.log(`    🚫 Closed — no longer accepting applications`);
