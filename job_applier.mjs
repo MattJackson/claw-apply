@@ -243,8 +243,8 @@ async function main() {
       await browser?.browser?.close().catch(() => {});
     }
     if (results.rate_limited) {
-      await sendTelegram(settings, `⚠️ *LinkedIn Easy Apply daily limit reached* — stopping all applications until tomorrow.`).catch(() => {});
-      break;
+      await sendTelegram(settings, `⚠️ *LinkedIn Easy Apply daily limit reached* — skipping LinkedIn, continuing other platforms.`).catch(() => {});
+      results.rate_limited = false; // Reset so other platforms can proceed
     }
   }
 
