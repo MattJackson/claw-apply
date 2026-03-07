@@ -207,6 +207,24 @@ async function collect(state, settings) {
 async function submit(settings, searchConfig, candidateProfile) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
+  // Clear stale batch markers — jobs marked as submitted but no filter_state.json means
+  // the batch completed (or was lost) without writing scores back. Reset so they get re-submitted.
+  const stateExists = existsSync(resolve(__dir, 'data/filter_state.json'));
+  if (!stateExists) {
+    let cleared = 0;
+    for (const j of getJobsByStatus('new')) {
+      if (j.filter_score == null && j.filter_batch_id) {
+        delete j.filter_batch_id;
+        delete j.filter_submitted_at;
+        cleared++;
+      }
+    }
+    if (cleared > 0) {
+      saveQueue();
+      console.log(`🔄 Cleared ${cleared} stale batch markers (batch completed without scoring)`);
+    }
+  }
+
   // Get all new jobs that haven't been scored yet (no score AND not already in a pending batch)
   const jobs = getJobsByStatus('new').filter(j => j.filter_score == null && !j.filter_batch_id && !j.filter_submitted_at);
 
