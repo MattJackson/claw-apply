@@ -256,7 +256,7 @@ function formatReport(s) {
     if (sorted.length > 0) {
       lines.push(`• Ready to apply: ${q.new}`);
       for (const [type, count] of sorted) {
-        lines.push(`  → ${typeNames[type] || type}: ${count}`);
+        lines.push(`→ ${typeNames[type] || type}: ${count}`);
       }
     } else {
       lines.push(`• Ready to apply: ${q.new}`);
