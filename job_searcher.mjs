@@ -21,7 +21,7 @@ process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return orig
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
 import { addJobs, loadQueue, loadConfig, getJobsByStatus, updateJobStatus, initQueue } from './lib/queue.mjs';
-import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
 import { verifyLogin as liLogin, searchLinkedIn, classifyExternalJobs } from './lib/linkedin.mjs';
@@ -102,19 +102,28 @@ async function main() {
   const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
   const anthropicKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
 
-  // Determine lookback: check for an in-progress run first, then fall back to first-run/normal logic
+  // Determine lookback:
+  // 1. data/next_run.json override (consumed after use)
+  // 2. Resuming in-progress run
+  // 3. Dynamic: time since last run × 1.25
   const savedProgress = existsSync(resolve(__dir, 'data/search_progress.json'))
     ? JSON.parse(readFileSync(resolve(__dir, 'data/search_progress.json'), 'utf8'))
     : null;
-  const isFirstRun = loadQueue().length === 0;
 
-  // Dynamic lookback: time since last run × 1.25 buffer (min 4h, max first_run_days)
+  const nextRunPath = resolve(__dir, 'data/next_run.json');
+  let nextRunOverride = null;
+  if (existsSync(nextRunPath)) {
+    try {
+      nextRunOverride = JSON.parse(readFileSync(nextRunPath, 'utf8'));
+    } catch {}
+  }
+
   function dynamicLookbackDays() {
     const lastRunPath = resolve(__dir, 'data/searcher_last_run.json');
-    if (!existsSync(lastRunPath)) return searchConfig.posted_within_days || 2;
+    if (!existsSync(lastRunPath)) return searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
     const lastRun = JSON.parse(readFileSync(lastRunPath, 'utf8'));
     const lastRanAt = lastRun.started_at || lastRun.finished_at;
-    if (!lastRanAt) return searchConfig.posted_within_days || 2;
+    if (!lastRanAt) return searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
     const hoursSince = (Date.now() - new Date(lastRanAt).getTime()) / (1000 * 60 * 60);
     const buffered = hoursSince * 1.25;
     const minHours = 4;
@@ -122,16 +131,17 @@ async function main() {
     return Math.min(Math.max(buffered / 24, minHours / 24), maxDays);
   }
 
-  const lookbackDays = savedProgress?.lookback_days
-    || (isFirstRun ? (searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS) : dynamicLookbackDays());
-
-  if (savedProgress?.lookback_days) {
+  let lookbackDays;
+  if (nextRunOverride?.lookback_days) {
+    lookbackDays = nextRunOverride.lookback_days;
+    console.log(`📋 Override from next_run.json — looking back ${lookbackDays} days\n`);
+  } else if (savedProgress?.lookback_days) {
+    lookbackDays = savedProgress.lookback_days;
     console.log(`🔁 Resuming ${lookbackDays.toFixed(2)}-day search run\n`);
-  } else if (isFirstRun) {
-    console.log(`📅 First run — looking back ${lookbackDays} days\n`);
   } else {
+    lookbackDays = dynamicLookbackDays();
     const hours = (lookbackDays * 24).toFixed(1);
-    console.log(`⏱️  Dynamic lookback: ${hours}h (time since last run × 1.25)\n`);
+    console.log(`⏱️  Lookback: ${hours}h (time since last run × 1.25)\n`);
   }
 
   // Init progress tracking — enables resume on restart
@@ -331,6 +341,11 @@ async function main() {
     writeFileSync(resolve(__dir, 'data/search_progress_last.json'), readFileSync(progressPath, 'utf8'));
   }
   clearProgress(); // run finished cleanly — next run starts fresh with new keywords
+
+  // Consume override file so next cron run uses dynamic lookback
+  if (existsSync(nextRunPath)) {
+    try { unlinkSync(nextRunPath); } catch {}
+  }
 
   console.log(`\n✅ Search complete at ${new Date().toISOString()}`);
   return { added: totalAdded, seen: totalSeen };
