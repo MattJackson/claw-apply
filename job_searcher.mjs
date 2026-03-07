@@ -29,7 +29,7 @@ import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
 import { generateKeywords } from './lib/keywords.mjs';
-import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete, saveKeywords, getSavedKeywords, clearProgress } from './lib/search_progress.mjs';
+import { initProgress, isCompleted, markComplete, getKeywordStart, markKeywordComplete, saveKeywords, getSavedKeywords, clearProgress, saveTrackLookback } from './lib/search_progress.mjs';
 import { ensureLoggedIn } from './lib/session.mjs';
 
 async function main() {
@@ -102,10 +102,13 @@ async function main() {
   const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
   const anthropicKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
 
-  // Determine lookback:
-  // 1. data/next_run.json override (consumed after use)
-  // 2. Resuming in-progress run
-  // 3. Dynamic: time since last run × 1.25
+  // Per-track lookback: each track remembers when it was last searched.
+  // New tracks get first_run_days (default 90), existing tracks look back since last completion.
+  const trackHistoryPath = resolve(__dir, 'data/track_history.json');
+  const trackHistory = existsSync(trackHistoryPath)
+    ? JSON.parse(readFileSync(trackHistoryPath, 'utf8'))
+    : {};
+
   const savedProgress = existsSync(resolve(__dir, 'data/search_progress.json'))
     ? JSON.parse(readFileSync(resolve(__dir, 'data/search_progress.json'), 'utf8'))
     : null;
@@ -118,34 +121,41 @@ async function main() {
     } catch {}
   }
 
-  function dynamicLookbackDays() {
-    const lastRunPath = resolve(__dir, 'data/searcher_last_run.json');
-    if (!existsSync(lastRunPath)) return searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
-    const lastRun = JSON.parse(readFileSync(lastRunPath, 'utf8'));
-    const lastRanAt = lastRun.started_at || lastRun.finished_at;
-    if (!lastRanAt) return searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
-    const hoursSince = (Date.now() - new Date(lastRanAt).getTime()) / (1000 * 60 * 60);
+  const defaultFirstRunDays = searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
+
+  function lookbackForTrack(trackName) {
+    // Override applies to all tracks
+    if (nextRunOverride?.lookback_days) return nextRunOverride.lookback_days;
+    // Resuming a crashed run — use the saved per-track lookback
+    if (savedProgress?.track_lookback?.[trackName]) return savedProgress.track_lookback[trackName];
+    // Per-track history: how long since this track last completed?
+    const lastSearched = trackHistory[trackName]?.last_searched_at;
+    if (!lastSearched) return defaultFirstRunDays; // new track — full lookback
+    const hoursSince = (Date.now() - new Date(lastSearched).getTime()) / (1000 * 60 * 60);
     const buffered = hoursSince * 1.25;
     const minHours = 4;
-    const maxDays = searchConfig.first_run_days || DEFAULT_FIRST_RUN_DAYS;
-    return Math.min(Math.max(buffered / 24, minHours / 24), maxDays);
+    return Math.min(Math.max(buffered / 24, minHours / 24), defaultFirstRunDays);
   }
 
-  let lookbackDays;
-  if (nextRunOverride?.lookback_days) {
-    lookbackDays = nextRunOverride.lookback_days;
-    console.log(`📋 Override from next_run.json — looking back ${lookbackDays} days\n`);
-  } else if (savedProgress?.lookback_days) {
-    lookbackDays = savedProgress.lookback_days;
-    console.log(`🔁 Resuming ${lookbackDays.toFixed(2)}-day search run\n`);
-  } else {
-    lookbackDays = dynamicLookbackDays();
-    const hours = (lookbackDays * 24).toFixed(1);
-    console.log(`⏱️  Lookback: ${hours}h (time since last run × 1.25)\n`);
+  function saveTrackCompletion(trackName) {
+    trackHistory[trackName] = { last_searched_at: new Date().toISOString() };
+    writeFileSync(trackHistoryPath, JSON.stringify(trackHistory, null, 2));
   }
+
+  // Log per-track lookback
+  console.log('📅 Per-track lookback:');
+  for (const search of searchConfig.searches) {
+    const days = lookbackForTrack(search.name);
+    const label = trackHistory[search.name]?.last_searched_at ? `${(days * 24).toFixed(1)}h since last run` : `${days}d (new track)`;
+    console.log(`  • ${search.name}: ${label}`);
+  }
+  if (nextRunOverride?.lookback_days) console.log(`  (override: ${nextRunOverride.lookback_days}d for all tracks)`);
+  console.log('');
 
   // Init progress tracking — enables resume on restart
-  initProgress(resolve(__dir, 'data'), lookbackDays);
+  // Use max lookback across tracks for progress file identity
+  const maxLookback = Math.max(...searchConfig.searches.map(s => lookbackForTrack(s.name)));
+  initProgress(resolve(__dir, 'data'), maxLookback);
 
   // Enhance keywords with AI — reuse saved keywords from progress if resuming, never regenerate mid-run
   for (const search of searchConfig.searches) {
@@ -194,7 +204,9 @@ async function main() {
         }
         const keywordStart = getKeywordStart('linkedin', search.name);
         if (keywordStart > 0) console.log(`  [${search.name}] resuming from keyword ${keywordStart + 1}/${search.keywords.length}`);
-        const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), keywordOffset: keywordStart, filters: { ...search.filters, posted_within_days: lookbackDays } };
+        const trackLookback = lookbackForTrack(search.name);
+        saveTrackLookback(search.name, trackLookback);
+        const effectiveSearch = { ...search, keywords: search.keywords.slice(keywordStart), keywordOffset: keywordStart, filters: { ...search.filters, posted_within_days: trackLookback } };
         let queryFound = 0, queryAdded = 0;
         try {
           await searchLinkedIn(liBrowser.page, effectiveSearch, {
@@ -225,6 +237,7 @@ async function main() {
         }
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
         markComplete('linkedin', search.name, { found: queryFound, added: queryAdded });
+        saveTrackCompletion(search.name);
         const tc = trackCounts[search.name] || (trackCounts[search.name] = { found: 0, added: 0 });
         tc.found += queryFound; tc.added += queryAdded;
         // Save progress after each search track
@@ -280,7 +293,9 @@ async function main() {
           console.log(`  [${search.name}] ✓ already done, skipping`);
           continue;
         }
-        const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: lookbackDays } };
+        const trackLookback = lookbackForTrack(search.name);
+        saveTrackLookback(search.name, trackLookback);
+        const effectiveSearch = { ...search, filters: { ...search.filters, posted_within_days: trackLookback } };
         let queryFound = 0, queryAdded = 0;
         try {
           await searchWellfound(wfBrowser.page, effectiveSearch, {
@@ -307,6 +322,7 @@ async function main() {
         }
         console.log(`\r  [${search.name}] ${queryFound} found, ${queryAdded} new`);
         markComplete('wellfound', search.name, { found: queryFound, added: queryAdded });
+        saveTrackCompletion(search.name);
         const tc = trackCounts[search.name] || (trackCounts[search.name] = { found: 0, added: 0 });
         tc.found += queryFound; tc.added += queryAdded;
         writeLastRun(false);

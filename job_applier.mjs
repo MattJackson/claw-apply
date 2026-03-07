@@ -26,6 +26,7 @@ import { createBrowser } from './lib/browser.mjs';
 import { ensureAuth } from './lib/session.mjs';
 import { FormFiller } from './lib/form_filler.mjs';
 import { applyToJob, supportedTypes } from './lib/apply/index.mjs';
+import { buildTrackProfiles, getTrackProfile } from './lib/profile.mjs';
 import { sendTelegram, formatApplySummary } from './lib/notify.mjs';
 import { processTelegramReplies } from './lib/telegram_answers.mjs';
 import { generateAnswer } from './lib/ai_answer.mjs';
@@ -45,11 +46,16 @@ async function main() {
 
   const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
-  const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
+  const baseProfile = await loadConfig(resolve(__dir, 'config/profile.json'));
+  const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
+  const profilesByTrack = await buildTrackProfiles(baseProfile, searchConfig.searches || []);
 
-  // Ensure resume is available locally (downloads from S3 if needed)
-  if (profile.resume_path) {
-    profile.resume_path = await ensureLocalFile('config/Matthew_Jackson_Resume.pdf', profile.resume_path);
+  // Ensure resume is available locally for each track profile
+  for (const prof of Object.values(profilesByTrack)) {
+    if (prof.resume_path) {
+      const s3Key = prof.resume_path.startsWith('/') ? prof.resume_path.split('/').pop() : prof.resume_path;
+      prof.resume_path = await ensureLocalFile(`config/${s3Key}`, prof.resume_path);
+    }
   }
 
   const answersPath = resolve(__dir, 'config/answers.json');
@@ -58,7 +64,8 @@ async function main() {
   const maxRetries = settings.max_retries ?? DEFAULT_MAX_RETRIES;
   const enabledTypes = settings.enabled_apply_types || DEFAULT_ENABLED_APPLY_TYPES;
   const apiKey = process.env.ANTHROPIC_API_KEY || settings.anthropic_api_key;
-  const formFiller = new FormFiller(profile, answers, { apiKey, answersPath });
+  // Default FormFiller uses base profile — swapped per job below
+  const formFiller = new FormFiller(baseProfile, answers, { apiKey, answersPath });
 
   const startedAt = Date.now();
   const rateLimitPath = resolve(__dir, 'data/linkedin_rate_limited_at.json');
@@ -213,7 +220,9 @@ async function main() {
           break;
         }
 
-        // Set job context for AI answers
+        // Swap profile for this job's track (different resume/cover letter per track)
+        const jobProfile = getTrackProfile(profilesByTrack, job.track);
+        formFiller.profile = jobProfile;
         formFiller.jobContext = { title: job.title, company: job.company };
 
         // Reload answers.json before each job — picks up Telegram replies between jobs
@@ -243,7 +252,7 @@ async function main() {
             new Promise((_, reject) => setTimeout(() => reject(new Error('Job apply timed out')), PER_JOB_TIMEOUT_MS)),
           ]);
           result.applyStartedAt = applyStartedAt;
-          await handleResult(job, result, results, settings, profile, apiKey);
+          await handleResult(job, result, results, settings, jobProfile, apiKey);
           if (results.rate_limited) break;
         } catch (e) {
           console.error(`    ❌ Error: ${e.message}`);

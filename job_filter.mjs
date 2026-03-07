@@ -32,6 +32,7 @@ process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return orig
 
 import { getJobsByStatus, updateJobStatus, loadConfig, loadQueue, saveQueue, dedupeAfterFilter, initQueue } from './lib/queue.mjs';
 import { submitBatches, checkBatch, downloadResults } from './lib/filter.mjs';
+import { buildTrackProfiles } from './lib/profile.mjs';
 import { sendTelegram, formatFilterSummary } from './lib/notify.mjs';
 import { DEFAULT_FILTER_MODEL, DEFAULT_FILTER_MIN_SCORE } from './lib/constants.mjs';
 
@@ -204,7 +205,7 @@ async function collect(state, settings) {
 // Phase 2 — Submit a new batch
 // ---------------------------------------------------------------------------
 
-async function submit(settings, searchConfig, candidateProfile) {
+async function submit(settings, searchConfig, profilesByTrack) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
   // Clear stale batch markers — jobs marked as submitted but no filter_state.json means
@@ -255,7 +256,7 @@ async function submit(settings, searchConfig, candidateProfile) {
   const submittedAt = new Date().toISOString();
   console.log(`🚀 Submitting batches — ${filterable.length} jobs across ${Object.keys(searchesByTrack).length} tracks, model: ${model}`);
 
-  const submitted = await submitBatches(filterable, searchesByTrack, candidateProfile, model, apiKey);
+  const submitted = await submitBatches(filterable, searchesByTrack, profilesByTrack, model, apiKey);
 
   writeState({
     batches: submitted,
@@ -304,7 +305,8 @@ async function main() {
   const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
   await initQueue(settings);
   const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
-  const candidateProfile = await loadConfig(resolve(__dir, 'config/profile.json'));
+  const baseProfile = await loadConfig(resolve(__dir, 'config/profile.json'));
+  const profilesByTrack = await buildTrackProfiles(baseProfile, searchConfig.searches || []);
 
   console.log('🔍 claw-apply: AI Job Filter\n');
 
@@ -317,7 +319,7 @@ async function main() {
 
   // Phase 2: submit any remaining unscored jobs (runs after collect too)
   if (!readState()) {
-    await submit(settings, searchConfig, candidateProfile);
+    await submit(settings, searchConfig, profilesByTrack);
   }
 }
 
