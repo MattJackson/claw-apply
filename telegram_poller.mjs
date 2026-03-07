@@ -11,7 +11,7 @@ loadEnv();
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createWriteStream } from 'fs';
-import { loadConfig } from './lib/queue.mjs';
+import { loadConfig, initQueue } from './lib/queue.mjs';
 import { processTelegramReplies } from './lib/telegram_answers.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -23,6 +23,7 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 const settings = loadConfig(resolve(__dir, 'config/settings.json'));
+await initQueue(settings);
 const answersPath = resolve(__dir, 'config/answers.json');
 
 const processed = await processTelegramReplies(settings, answersPath);
