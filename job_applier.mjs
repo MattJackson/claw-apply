@@ -305,7 +305,7 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
   const applyDuration = applyStartedAt ? Math.round((Date.now() - applyStartedAt) / 1000) : null;
 
   // Track per-job detail for summary
-  results.jobDetails.push({ title, company, url: job.url, status, duration: applyDuration });
+  results.jobDetails.push({ title, company, url: job.apply_url || job.url, status, duration: applyDuration });
 
   switch (status) {
     case 'submitted':
