@@ -51,6 +51,8 @@ async function main() {
   const formFiller = new FormFiller(profile, answers, { apiKey, answersPath });
 
   const startedAt = Date.now();
+  const RATE_LIMIT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+  const rateLimitPath = resolve(__dir, 'data/linkedin_rate_limited_at.json');
   const results = {
     submitted: 0, failed: 0, needs_answer: 0, total: 0,
     skipped_recruiter: 0, skipped_external: 0, skipped_no_apply: 0, skipped_other: 0,
@@ -83,9 +85,22 @@ async function main() {
     return;
   }
 
-  // Get + sort jobs — only enabled apply types
+  // Pre-check: which platforms are rate-limited? Exclude their jobs from selection
+  const excludedTypes = new Set();
+  if (existsSync(rateLimitPath)) {
+    try {
+      const { at } = JSON.parse(readFileSync(rateLimitPath, 'utf8'));
+      if (Date.now() - at < RATE_LIMIT_COOLDOWN_MS) {
+        excludedTypes.add('easy_apply'); // LinkedIn Easy Apply is rate-limited
+        const hoursLeft = ((RATE_LIMIT_COOLDOWN_MS - (Date.now() - at)) / 3600000).toFixed(1);
+        console.log(`⏸️  LinkedIn rate-limited (${hoursLeft}h remaining) — selecting from other platforms\n`);
+      }
+    } catch {}
+  }
+
+  // Get + sort jobs — only enabled apply types, excluding rate-limited platforms
   const allJobs = getJobsByStatus(['new', 'needs_answer'])
-    .filter(j => enabledTypes.includes(j.apply_type))
+    .filter(j => enabledTypes.includes(j.apply_type) && !excludedTypes.has(j.apply_type))
     .sort((a, b) => {
       // Primary: filter_score descending
       const scoreDiff = (b.filter_score ?? 0) - (a.filter_score ?? 0);
@@ -127,8 +142,6 @@ async function main() {
   const sortedPlatforms = Object.entries(byPlatform)
     .sort((a, b) => (platformOrder.indexOf(a[0]) ?? 99) - (platformOrder.indexOf(b[0]) ?? 99));
   let timedOut = false;
-  const RATE_LIMIT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
-  const rateLimitPath = resolve(__dir, 'data/linkedin_rate_limited_at.json');
 
   for (const [platform, platformJobs] of sortedPlatforms) {
     if (timedOut) break;
