@@ -20,11 +20,11 @@ const origStderrWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (chunk, ...args) => { logStream.write(chunk); return origStdoutWrite(chunk, ...args); };
 process.stderr.write = (chunk, ...args) => { logStream.write(chunk); return origStderrWrite(chunk, ...args); };
 
-import { addJobs, loadQueue, loadConfig } from './lib/queue.mjs';
+import { addJobs, loadQueue, loadConfig, getJobsByStatus, updateJobStatus } from './lib/queue.mjs';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { acquireLock } from './lib/lock.mjs';
 import { createBrowser } from './lib/browser.mjs';
-import { verifyLogin as liLogin, searchLinkedIn } from './lib/linkedin.mjs';
+import { verifyLogin as liLogin, searchLinkedIn, classifyExternalJobs } from './lib/linkedin.mjs';
 import { verifyLogin as wfLogin, searchWellfound } from './lib/wellfound.mjs';
 import { sendTelegram, formatSearchSummary } from './lib/notify.mjs';
 import { DEFAULT_FIRST_RUN_DAYS } from './lib/constants.mjs';
@@ -202,6 +202,16 @@ async function main() {
       }
 
       platformsRun.push('LinkedIn');
+
+      // Classify unknown_external jobs using the existing LinkedIn browser session
+      const unclassified = getJobsByStatus('new').filter(j => j.apply_type === 'unknown_external');
+      if (unclassified.length > 0) {
+        console.log(`\n🔍 Classifying ${unclassified.length} external jobs...`);
+        const { classified, remaining } = await classifyExternalJobs(liBrowser.page, unclassified, (job, applyType, applyUrl) => {
+          updateJobStatus(job.id, 'new', { apply_type: applyType, apply_url: applyUrl });
+        });
+        console.log(`  ✅ Classified ${classified}, ${remaining} still unknown`);
+      }
     } catch (e) {
       console.error(`  ❌ LinkedIn error: ${e.message}`);
       if (e.stack) console.error(`  Stack: ${e.stack.split('\n').slice(1, 3).join(' | ').trim()}`);
