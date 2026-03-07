@@ -18,9 +18,9 @@ async function main() {
 
   // Check configs
   console.log('Checking config files...');
-  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
-  const profile = loadConfig(resolve(__dir, 'config/profile.json'));
-  const searchConfig = loadConfig(resolve(__dir, 'config/search_config.json'));
+  const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
+  const profile = await loadConfig(resolve(__dir, 'config/profile.json'));
+  const searchConfig = await loadConfig(resolve(__dir, 'config/search_config.json'));
 
   const checks = [
     [profile.name?.first && profile.name?.last, 'profile.json: name'],

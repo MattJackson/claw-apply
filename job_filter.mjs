@@ -238,7 +238,7 @@ async function submit(settings, searchConfig, candidateProfile) {
   const profilePaths = settings.filter?.job_profiles || {};
   const jobProfilesByTrack = {};
   for (const [track, path] of Object.entries(profilePaths)) {
-    const profile = loadProfile(path);
+    const profile = await loadProfile(path);
     if (profile) jobProfilesByTrack[track] = profile;
     else console.warn(`⚠️  Could not load job profile for track "${track}" at ${path}`);
   }

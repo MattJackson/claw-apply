@@ -9,6 +9,12 @@ import { readFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
+import { loadEnv } from './lib/env.mjs';
+loadEnv();
+
+import { loadConfig, initQueue, loadQueue } from './lib/queue.mjs';
+import { sendTelegram } from './lib/notify.mjs';
+
 const __dir = dirname(fileURLToPath(import.meta.url));
 const jsonMode = process.argv.includes('--json');
 
@@ -32,7 +38,6 @@ function buildSearchProgress() {
   const sp = readJson(resolve(__dir, 'data/search_progress.json'));
   if (!sp) return null;
 
-  // Build unique track list from completed + keyword_progress, prefer platform-specific key
   const seen = new Set();
   const tracks = [];
 
@@ -62,10 +67,7 @@ function buildSearchProgress() {
   return tracks;
 }
 
-function buildStatus() {
-  const queue = readJson(resolve(__dir, 'data/jobs_queue.json')) || [];
-  const log   = readJson(resolve(__dir, 'data/applications_log.json')) || [];
-
+function buildStatus(queue, log) {
   // Queue breakdown
   const byStatus = {};
   const byPlatform = {};
@@ -162,27 +164,27 @@ function formatReport(s) {
   // Searcher section
   const sr = s.searcher;
   const searcherLine = sr.running
-    ? `🔄 Running now — ${q.total} jobs found so far`
+    ? `Running now — ${q.total} jobs found so far`
     : sr.last_run?.finished === false
-      ? `⚠️  Last run interrupted ${timeAgo(sr.last_run?.started_at)} (partial results saved)`
-      : `⏸️  Last ran ${timeAgo(sr.last_run?.finished_at)}`;
+      ? `Last run interrupted ${timeAgo(sr.last_run?.started_at)} (partial results saved)`
+      : `Last ran ${timeAgo(sr.last_run?.finished_at)}`;
   const lastRunDetail = sr.last_run && !sr.running
-    ? `→ Found ${sr.last_run.added} new jobs (${sr.last_run.seen} seen, ${sr.last_run.skipped_dupes || 0} dupes)`
+    ? `Found ${sr.last_run.added} new jobs (${sr.last_run.seen} seen, ${sr.last_run.skipped_dupes || 0} dupes)`
     : null;
 
   // Applier section
   const ar = s.applier;
   const applierLine = ar.running
-    ? `🔄 Running now`
-    : `⏸️  Last ran ${timeAgo(ar.last_run?.finished_at)}`;
+    ? `Running now`
+    : `Last ran ${timeAgo(ar.last_run?.finished_at)}`;
   const lastApplierDetail = ar.last_run && !ar.running
-    ? `→ Applied ${ar.last_run.submitted} jobs in that run`
+    ? `Applied ${ar.last_run.submitted} jobs in that run`
     : null;
 
   const lines = [
-    `📊 *claw-apply Status*`,
+    `*claw-apply Status*`,
     ``,
-    `🔍 *Searcher:* ${searcherLine}`,
+    `*Searcher:* ${searcherLine}`,
   ];
   if (lastRunDetail) lines.push(lastRunDetail);
 
@@ -198,8 +200,8 @@ function formatReport(s) {
       lines.push(`${platform.charAt(0).toUpperCase() + platform.slice(1)}:`);
       for (const t of tracks) {
         const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0;
-        const bar = t.complete ? '✅ done' : `${t.done}/${t.total} keywords (${pct}%)`;
-        lines.push(`• ${t.track}: ${bar}`);
+        const bar = t.complete ? 'done' : `${t.done}/${t.total} keywords (${pct}%)`;
+        lines.push(`  ${t.track}: ${bar}`);
       }
     }
   }
@@ -208,23 +210,23 @@ function formatReport(s) {
   const fr = s.filter;
   let filterLine;
   if (fr.batch_pending) {
-    filterLine = `⏳ Batch in flight — ${fr.batch_job_count} jobs, submitted ${timeAgo(new Date(fr.submitted_at).getTime())}`;
+    filterLine = `Batch in flight — ${fr.batch_job_count} jobs, submitted ${timeAgo(new Date(fr.submitted_at).getTime())}`;
   } else if (fr.last_run) {
     const lr = fr.last_run;
-    filterLine = `⏸️  Last ran ${timeAgo(new Date(lr.collected_at).getTime())} — ✅ ${lr.passed} passed, 🚫 ${lr.filtered} filtered`;
+    filterLine = `Last ran ${timeAgo(new Date(lr.collected_at).getTime())} — ${lr.passed} passed, ${lr.filtered} filtered`;
   } else {
-    filterLine = fr.unscored > 0 ? `🟡 ${fr.unscored} jobs awaiting filter` : `⏸️  Never run`;
+    filterLine = fr.unscored > 0 ? `${fr.unscored} jobs awaiting filter` : `Never run`;
   }
   if (fr.model) filterLine += ` (${fr.model.replace('claude-', '').replace(/-\d{8}$/, '')})`;
-  if (fr.unscored > 0 && !fr.batch_pending) filterLine += ` · ${fr.unscored} unscored`;
+  if (fr.unscored > 0 && !fr.batch_pending) filterLine += ` | ${fr.unscored} unscored`;
 
-  lines.push(`🔬 *Filter:* ${filterLine}`);
-  lines.push(`🚀 *Applier:* ${applierLine}`);
+  lines.push(`*Filter:* ${filterLine}`);
+  lines.push(`*Applier:* ${applierLine}`);
   if (lastApplierDetail) lines.push(lastApplierDetail);
 
-  // Queue summary — only show non-zero counts
+  // Queue summary
   const unique = q.total - (q.duplicate || 0);
-  lines.push('', `📋 *Queue* — ${unique} unique jobs (${q.duplicate || 0} dupes)`);
+  lines.push('', `*Queue* — ${unique} unique jobs (${q.duplicate || 0} dupes)`);
 
   const queueLines = [
     [q.applied, 'Applied'],
@@ -254,17 +256,17 @@ function formatReport(s) {
       unknown: 'Unknown',
     };
     if (sorted.length > 0) {
-      lines.push(`• Ready to apply: ${q.new}`);
+      lines.push(`Ready to apply: ${q.new}`);
       for (const [type, count] of sorted) {
-        lines.push(`→ ${typeNames[type] || type}: ${count}`);
+        lines.push(`  ${typeNames[type] || type}: ${count}`);
       }
     } else {
-      lines.push(`• Ready to apply: ${q.new}`);
+      lines.push(`Ready to apply: ${q.new}`);
     }
   }
 
   for (const [count, label] of queueLines) {
-    if (count > 0) lines.push(`• ${label}: ${count}`);
+    if (count > 0) lines.push(`${label}: ${count}`);
   }
 
   // Last applied
@@ -276,16 +278,19 @@ function formatReport(s) {
   return lines.join('\n');
 }
 
-import { loadConfig } from './lib/queue.mjs';
-import { sendTelegram } from './lib/notify.mjs';
+// Main
+const settings = await loadConfig(resolve(__dir, 'config/settings.json'));
+await initQueue(settings);
+const queue = loadQueue();
+const { loadJSON } = await import('./lib/storage.mjs');
+const log = await loadJSON(resolve(__dir, 'data/applications_log.json'), []);
 
-const status = buildStatus();
+const status = buildStatus(queue, log);
 
 if (jsonMode) {
   console.log(JSON.stringify(status, null, 2));
 } else {
   const report = formatReport(status);
-  const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   if (settings.notifications?.bot_token && settings.notifications?.telegram_user_id) {
     await sendTelegram(settings, report);
   } else {
