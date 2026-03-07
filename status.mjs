@@ -269,7 +269,6 @@ if (jsonMode) {
   const settings = loadConfig(resolve(__dir, 'config/settings.json'));
   if (settings.notifications?.bot_token && settings.notifications?.telegram_user_id) {
     await sendTelegram(settings, report);
-    console.log('Status sent to Telegram.');
   } else {
     console.log(report);
   }
