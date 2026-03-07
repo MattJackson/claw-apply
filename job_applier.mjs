@@ -35,8 +35,7 @@ import {
 
 const DEFAULT_ENABLED_APPLY_TYPES = [
   'easy_apply', 'wellfound',
-  'greenhouse', 'lever', 'ashby', 'workday', 'jobvite',
-  'unknown_external',
+  'ashby', 'unknown_external',
 ];
 
 const isPreview = process.argv.includes('--preview');
