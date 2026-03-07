@@ -6,7 +6,7 @@ loadEnv(); // load .env before anything else
  * Reads jobs queue and applies using the appropriate handler per apply_type
  * Run via cron or manually: node job_applier.mjs [--preview]
  */
-import { existsSync, writeFileSync, createWriteStream } from 'fs';
+import { existsSync, readFileSync, writeFileSync, createWriteStream } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -127,8 +127,29 @@ async function main() {
   const sortedPlatforms = Object.entries(byPlatform)
     .sort((a, b) => (platformOrder.indexOf(a[0]) ?? 99) - (platformOrder.indexOf(b[0]) ?? 99));
   let timedOut = false;
+  const RATE_LIMIT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+  const rateLimitPath = resolve(__dir, 'data/linkedin_rate_limited_at.json');
+
   for (const [platform, platformJobs] of sortedPlatforms) {
     if (timedOut) break;
+
+    // Skip LinkedIn if rate limited within cooldown window
+    if (platform === 'linkedin' && existsSync(rateLimitPath)) {
+      try {
+        const { at } = JSON.parse(readFileSync(rateLimitPath, 'utf8'));
+        const elapsed = Date.now() - at;
+        if (elapsed < RATE_LIMIT_COOLDOWN_MS) {
+          const hoursLeft = ((RATE_LIMIT_COOLDOWN_MS - elapsed) / 3600000).toFixed(1);
+          console.log(`\n--- LINKEDIN (${platformJobs.length} jobs) ---\n`);
+          console.log(`  ⏸️  Easy Apply daily limit — ${hoursLeft}h cooldown remaining, skipping LinkedIn`);
+          continue;
+        }
+        // Cooldown expired — remove the file
+        const { unlinkSync } = await import('fs');
+        unlinkSync(rateLimitPath);
+      } catch {}
+    }
+
     console.log(`\n--- ${platform.toUpperCase()} (${platformJobs.length} jobs) ---\n`);
     let browser;
     let platformProfileName = null;
@@ -243,7 +264,8 @@ async function main() {
       await browser?.browser?.close().catch(() => {});
     }
     if (results.rate_limited) {
-      await sendTelegram(settings, `⚠️ *LinkedIn Easy Apply daily limit reached* — skipping LinkedIn, continuing other platforms.`).catch(() => {});
+      writeFileSync(rateLimitPath, JSON.stringify({ at: Date.now() }));
+      await sendTelegram(settings, `⚠️ *LinkedIn Easy Apply daily limit reached* — pausing LinkedIn for 6 hours, continuing other platforms.`).catch(() => {});
       results.rate_limited = false; // Reset so other platforms can proceed
     }
   }
