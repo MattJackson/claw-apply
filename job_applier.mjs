@@ -30,7 +30,7 @@ import { processTelegramReplies } from './lib/telegram_answers.mjs';
 import { generateAnswer } from './lib/ai_answer.mjs';
 import {
   APPLY_BETWEEN_DELAY_BASE, APPLY_BETWEEN_DELAY_JITTER, DEFAULT_MAX_RETRIES,
-  APPLY_RUN_TIMEOUT_MS, PER_JOB_TIMEOUT_MS
+  APPLY_RUN_TIMEOUT_MS, PER_JOB_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS
 } from './lib/constants.mjs';
 
 const DEFAULT_ENABLED_APPLY_TYPES = ['easy_apply', 'wellfound'];
@@ -51,7 +51,6 @@ async function main() {
   const formFiller = new FormFiller(profile, answers, { apiKey, answersPath });
 
   const startedAt = Date.now();
-  const RATE_LIMIT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
   const rateLimitPath = resolve(__dir, 'data/linkedin_rate_limited_at.json');
   const results = {
     submitted: 0, failed: 0, needs_answer: 0, total: 0,
