@@ -212,15 +212,16 @@ async function submit(settings, searchConfig, candidateProfile) {
   const stateExists = existsSync(resolve(__dir, 'data/filter_state.json'));
   if (!stateExists) {
     let cleared = 0;
-    for (const j of getJobsByStatus('new')) {
-      if (j.filter_score == null && j.filter_batch_id) {
+    const queue = loadQueue();
+    for (const j of queue) {
+      if (j.status === 'new' && j.filter_score == null && j.filter_batch_id) {
         delete j.filter_batch_id;
         delete j.filter_submitted_at;
         cleared++;
       }
     }
     if (cleared > 0) {
-      saveQueue();
+      saveQueue(queue);
       console.log(`🔄 Cleared ${cleared} stale batch markers (batch completed without scoring)`);
     }
   }
