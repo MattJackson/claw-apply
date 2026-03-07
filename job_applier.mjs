@@ -399,6 +399,9 @@ async function handleResult(job, result, results, settings, profile, apiKey) {
 
     case 'stuck':
     case 'incomplete': {
+      if (result.validation_errors?.length) {
+        console.log(`    ⚠️  Validation errors: ${result.validation_errors.join(' | ')}`);
+      }
       const retries = (job.retry_count || 0) + 1;
       const maxRetry = settings.max_retries ?? DEFAULT_MAX_RETRIES;
       if (retries <= maxRetry) {
