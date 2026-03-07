@@ -131,24 +131,25 @@ async function main() {
     if (timedOut) break;
     console.log(`\n--- ${platform.toUpperCase()} (${platformJobs.length} jobs) ---\n`);
     let browser;
+    let platformProfileName = null;
     try {
       // LinkedIn and Wellfound need authenticated sessions; external ATS uses plain browser
       if (platform === 'external') {
         browser = await createBrowser(settings, null); // no profile needed
       } else {
-        // Check auth status before creating browser
+        // Check auth status and get profile name dynamically
         const kernelApiKey = process.env.KERNEL_API_KEY || settings.kernel_api_key;
         const authResult = await ensureAuth(platform, kernelApiKey);
         if (!authResult.ok) {
           console.error(`  ❌ ${platform} auth failed: ${authResult.reason}`);
           await sendTelegram(settings, `⚠️ *${platform}* auth failed — ${authResult.reason}`).catch(() => {});
-          // Mark all jobs for this platform as needing retry
           for (const job of platformJobs) {
             updateJobStatus(job.id, 'new', { retry_reason: 'auth_failed' });
           }
           continue;
         }
-        browser = await createBrowser(settings, platform);
+        platformProfileName = authResult.profileName;
+        browser = await createBrowser(settings, platformProfileName);
         console.log('  ✅ Logged in\n');
       }
 
@@ -212,7 +213,7 @@ async function main() {
             try {
               const newBrowser = platform === 'external'
                 ? await createBrowser(settings, null)
-                : await createBrowser(settings, platform);
+                : await createBrowser(settings, platformProfileName);
               browser = newBrowser;
               console.log(`    ✅ New browser session created`);
             } catch (browserErr) {
